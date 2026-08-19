@@ -13,19 +13,43 @@ Odwzorowanie rozdziału 9 specyfikacji. Każdy etap kończy się działającą a
 Weryfikacja: 29 testów jednostkowych, typecheck, lint, build — wszystko przechodzi.
 Przełączanie miesiąca sprawdzone także na przełomie roku.
 
-## Etap 1 — model danych i baza ⬜ NASTĘPNY
+## Zmiana kolejności: najpierw tryb demonstracyjny
 
-- [ ] Zaimplementować modele Category, Payment, BillTemplate i Subscription
-- [ ] Utworzyć enumy statusów, źródeł i częstotliwości
+Decyzja właściciela projektu (19.08.2026): budujemy najpierw wszystkie ekrany
+na danych trzymanych w pamięci, a bazę SQLite podłączamy na końcu.
+
+Jest to możliwe bez podwójnej pracy, ponieważ ekrany rozmawiają wyłącznie
+z interfejsem `ExpensesRepository` (`src/data/repository.ts`), zgodnie z 8.1 i 8.2.
+Podmiana danych z pamięci na SQLite to zmiana jednego pliku: `src/data/index.ts`.
+
+**Ograniczenie trybu demonstracyjnego:** dane nie przeżywają zamknięcia
+aplikacji. Scenariusz T-16 („ponowne uruchomienie aplikacji") będzie
+możliwy do zaliczenia dopiero po Etapie 1b.
+
+## Etap 1a — model danych i repozytorium w pamięci ✅ ZAKOŃCZONY
+
+- [x] Zaimplementować modele Category, Payment, BillTemplate i Subscription
+- [x] Utworzyć enumy statusów, źródeł i częstotliwości
+- [x] Wyliczanie statusu rachunku (BR-11) + testy
+- [x] Zdefiniować interfejs repozytorium (szew do podmiany na SQLite)
+- [x] Repozytorium w pamięci + operacje CRUD
+- [x] Dane demonstracyjne dla bieżącego i poprzedniego miesiąca (3.1)
+- [x] Testy scenariuszy T-01, T-02, T-03, T-04, T-15
+
+## Etap 1b — baza SQLite ⬜ (po ukończeniu ekranów)
+
 - [ ] Utworzyć bazę SQLite, tabele, indeksy i pierwszą migrację
-- [ ] Dodać repozytoria i operacje CRUD
+- [ ] Podmienić repozytorium w `src/data/index.ts`
 - [ ] Dodać domyślne kategorie przy pierwszym uruchomieniu
-- [ ] Napisać testy konwersji kwot oraz zapisu/odczytu bazy
+- [ ] Napisać testy zapisu/odczytu bazy oraz scenariusz T-16
 
-## Etap 2 — ekran główny ⬜
+## Etap 2 — ekran główny ✅ ZAKOŃCZONY
 
-- [ ] Podłączyć trzy karty do zapytań agregujących z bazy
-- [ ] Sprawdzić aktualizację sum po zmianie danych
+- [x] Zaimplementować wybór miesiąca i roku
+- [x] Zaimplementować trzy karty kategorii z sumami
+- [x] Podłączyć karty do zapytań agregujących
+- [x] Dodać przejścia do szczegółów kategorii
+- [x] Sprawdzić aktualizację sum po zmianie miesiąca
 
 ## Etap 3 — rachunki ⬜
 
