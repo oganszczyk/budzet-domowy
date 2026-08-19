@@ -15,17 +15,17 @@ import { FrequencyType, MainType, PaymentMethod, PaymentSource } from '@/domain/
 import type { BillTemplate, Category, Payment, Subscription } from '@/domain/models';
 import { addMonths, currentYearMonth, dueDateFor, type YearMonth } from '@/lib/date';
 
-/** 5.2: domyślne podkategorie rachunków. */
-const BILL_CATEGORIES = [
-  'Czynsz za mieszkanie',
-  'Prąd',
-  'Woda',
-  'Gaz',
-  'Internet',
-  'Telefon',
-  'Ubezpieczenie',
-  'Inne rachunki',
-];
+/**
+ * Rachunki domowe nie mają podkategorii.
+ *
+ * Podkategoria „Gaz" dla rachunku „Gaz" tylko dublowałaby nazwę i zmuszała
+ * do wybierania jej przy każdym nowym rachunku. Nazwa rachunku w pełni go
+ * identyfikuje, więc wszystkie rachunki należą do jednej kategorii głównej.
+ *
+ * BR-01 („każdy zapis należy do dokładnie jednej kategorii głównej") jest
+ * spełnione. BR-02 wymaga podkategorii wyłącznie dla ZAKUPÓW i tam zostaje.
+ */
+const BILL_CATEGORY_NAME = 'Rachunki domowe';
 
 /** 5.3: kategorie pomocnicze subskrypcji. */
 const SUBSCRIPTION_CATEGORIES = ['Rozrywka', 'Sport', 'AI', 'Chmura', 'Inne'];
@@ -42,14 +42,7 @@ const PURCHASE_CATEGORIES = [
 ];
 
 const ICONS: Record<string, string> = {
-  'Czynsz za mieszkanie': 'home-outline',
-  Prąd: 'flash-outline',
-  Woda: 'water-outline',
-  Gaz: 'flame-outline',
-  Internet: 'wifi-outline',
-  Telefon: 'call-outline',
-  Ubezpieczenie: 'shield-checkmark-outline',
-  'Inne rachunki': 'document-text-outline',
+  'Rachunki domowe': 'receipt-outline',
   Rozrywka: 'film-outline',
   Sport: 'barbell-outline',
   AI: 'sparkles-outline',
@@ -80,7 +73,7 @@ export function buildDemoCategories(): Category[] {
     });
   };
 
-  add(MainType.BILL, BILL_CATEGORIES);
+  add(MainType.BILL, [BILL_CATEGORY_NAME]);
   add(MainType.SUBSCRIPTION, SUBSCRIPTION_CATEGORIES);
   add(MainType.PURCHASE, PURCHASE_CATEGORIES);
 
@@ -124,7 +117,8 @@ function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
   const thisMonth = currentYearMonth();
   const lastMonth = addMonths(thisMonth, -1);
 
-  const billCat = (name: string) => categoryId(categories, MainType.BILL, name);
+  // Wszystkie rachunki dzielą jedną kategorię — patrz komentarz przy BILL_CATEGORY_NAME.
+  const billCategoryId = categoryId(categories, MainType.BILL, BILL_CATEGORY_NAME);
   const subCat = (name: string) => categoryId(categories, MainType.SUBSCRIPTION, name);
   const buyCat = (name: string) => categoryId(categories, MainType.PURCHASE, name);
 
@@ -137,7 +131,7 @@ function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
     templateId: number
   ): PaymentSeed => ({
     mainType: MainType.BILL,
-    categoryId: billCat(name),
+    categoryId: billCategoryId,
     title: name,
     amountGrosze,
     effectiveDate: dayIn(month, 1),
@@ -249,7 +243,7 @@ function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
 
 /** 7.3: szablony rachunków cyklicznych. */
 function buildDemoBillTemplates(categories: Category[]): Omit<BillTemplate, 'id'>[] {
-  const billCat = (name: string) => categoryId(categories, MainType.BILL, name);
+  const billCategoryId = categoryId(categories, MainType.BILL, BILL_CATEGORY_NAME);
 
   const template = (
     name: string,
@@ -258,7 +252,7 @@ function buildDemoBillTemplates(categories: Category[]): Omit<BillTemplate, 'id'
     fixedAmountGrosze: number | null = null
   ) => ({
     name,
-    categoryId: billCat(name),
+    categoryId: billCategoryId,
     defaultDueDay,
     isActive: true,
     useFixedAmount,

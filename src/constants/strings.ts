@@ -84,7 +84,6 @@ export const strings = {
       title: 'Nowy rachunek cykliczny',
       nameLabel: 'Nazwa rachunku',
       namePlaceholder: 'np. Prąd',
-      categoryLabel: 'Podkategoria',
       dueDayLabel: 'Dzień terminu w miesiącu',
       fixedAmountToggle: 'Stała kwota co miesiąc',
       fixedAmountHint:

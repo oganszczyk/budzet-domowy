@@ -135,7 +135,11 @@ export default function BillDetailScreen() {
     });
     if (!confirmed) return;
 
-    deletePayment.mutate(bill.id, { onSuccess: () => router.back() });
+    deletePayment.mutate(bill.id, {
+      // Jak w formularzu nowego rachunku: `back()` nic nie robi, gdy ekran
+      // otwarto bezpośrednio, więc wtedy wracamy wprost na listę.
+      onSuccess: () => (router.canGoBack() ? router.back() : router.replace('/bills')),
+    });
   };
 
   return (

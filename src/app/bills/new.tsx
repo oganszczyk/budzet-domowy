@@ -8,7 +8,7 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { getRepository } from '@/data';
 import { strings } from '@/constants/strings';
@@ -32,11 +32,31 @@ export default function NewBillTemplateScreen() {
   const { data: categories } = useCategories(MainType.BILL);
   const createTemplate = useCreateBillTemplate();
 
+  /**
+   * Rachunki nie mają podkategorii — kategoria jest jedna dla wszystkich,
+   * więc bierzemy ją z repozytorium zamiast pytać użytkownika.
+   */
+  const billCategoryId = categories?.[0]?.id ?? null;
+
   const [name, setName] = useState('');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [dueDayText, setDueDayText] = useState('10');
   const [useFixedAmount, setUseFixedAmount] = useState(false);
   const [fixedAmountGrosze, setFixedAmountGrosze] = useState<number | null>(null);
+
+  /**
+   * Powrót na listę rachunków.
+   *
+   * Samo `router.back()` nie wystarcza: gdy ekran otwarto bezpośrednio
+   * (link, odświeżenie strony w przeglądarce), nie ma dokąd wracać
+   * i przycisk nic by nie zrobił.
+   */
+  const goToBills = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/bills');
+    }
+  };
 
   const dueDay = Number(dueDayText);
   const dueDayValid = Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31;
@@ -44,15 +64,15 @@ export default function NewBillTemplateScreen() {
   const nameValid = name.trim().length > 0 && name.trim().length <= MAX_NAME_LENGTH;
   const fixedAmountValid = !useFixedAmount || validateAmountGrosze(fixedAmountGrosze).ok;
 
-  const canSave = nameValid && dueDayValid && categoryId !== null && fixedAmountValid;
+  const canSave = nameValid && dueDayValid && billCategoryId !== null && fixedAmountValid;
 
   const handleSave = () => {
-    if (!canSave || categoryId === null) return;
+    if (!canSave || billCategoryId === null) return;
 
     createTemplate.mutate(
       {
         name: name.trim(),
-        categoryId,
+        categoryId: billCategoryId,
         defaultDueDay: dueDay,
         isActive: true,
         useFixedAmount,
@@ -63,7 +83,7 @@ export default function NewBillTemplateScreen() {
           // Utwórz rekord na wybrany miesiąc, żeby nowy rachunek
           // pojawił się na liście od razu (BR-12 chroni przed duplikatem).
           await generateMonthlyBills(getRepository(), month);
-          router.back();
+          goToBills();
         },
       }
     );
@@ -87,32 +107,8 @@ export default function NewBillTemplateScreen() {
           />
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>{strings.bills.newTemplate.categoryLabel}</Text>
-          <View style={styles.chips}>
-            {(categories ?? []).map((category) => {
-              const selected = category.id === categoryId;
-              return (
-                <Pressable
-                  key={category.id}
-                  onPress={() => setCategoryId(category.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={category.name}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    selected && styles.chipSelected,
-                    pressed && styles.chipPressed,
-                  ]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {category.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        {/* Bez wyboru podkategorii — rachunki jej nie mają.
+            Kategoria jest jedna i przypisujemy ją automatycznie. */}
 
         <View style={styles.field}>
           <Text style={styles.label}>{strings.bills.newTemplate.dueDayLabel}</Text>
@@ -162,7 +158,7 @@ export default function NewBillTemplateScreen() {
             disabled={!canSave}
             loading={createTemplate.isPending}
           />
-          <Button label={strings.common.cancel} variant="secondary" onPress={() => router.back()} />
+          <Button label={strings.common.cancel} variant="secondary" onPress={goToBills} />
         </View>
       </Screen>
     </>
@@ -197,34 +193,6 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: colors.statusOverdue,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  chipSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  chipPressed: {
-    opacity: 0.7,
-  },
-  chipText: {
-    fontSize: fontSize.body,
-    color: colors.text,
-  },
-  chipTextSelected: {
-    color: colors.primary,
-    fontWeight: '600',
   },
   switchRow: {
     flexDirection: 'row',
