@@ -47,8 +47,9 @@ const SHARED_CATEGORIES = [
   'Rozrywka',
   // 5.3 — subskrypcje
   'Sport',
-  'AI',
-  'Chmura',
+  // Specyfikacja wymienia osobno „AI" i „chmurę". W praktyce to ten sam
+  // rodzaj wydatku — narzędzia i usługi komputerowe — więc trzymamy je razem.
+  'Komputerowe',
   // wspólne
   'Inne',
 ];
@@ -57,8 +58,7 @@ const ICONS: Record<string, string> = {
   'Rachunki domowe': 'receipt-outline',
   Rozrywka: 'film-outline',
   Sport: 'barbell-outline',
-  AI: 'sparkles-outline',
-  Chmura: 'cloud-outline',
+  Komputerowe: 'laptop-outline',
   Jedzenie: 'restaurant-outline',
   'Kosmetyki i higiena': 'flower-outline',
   Sprzątanie: 'sparkles-outline',
@@ -224,7 +224,7 @@ function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
 
     makeSubscription(thisMonth, 'Netflix', 'Rozrywka', 4300, 8, 1),
     makeSubscription(thisMonth, 'Siłownia', 'Sport', 12900, 1, 2),
-    makeSubscription(thisMonth, 'Narzędzie AI', 'AI', 8000, 15, 3),
+    makeSubscription(thisMonth, 'Narzędzie AI', 'Komputerowe', 8000, 15, 3),
 
     makePurchase(thisMonth, 'Lidl', 'Jedzenie', 12550, 3, PaymentMethod.CARD),
     makePurchase(thisMonth, 'Biedronka', 'Jedzenie', 8730, 9, PaymentMethod.CARD),
@@ -314,7 +314,7 @@ function buildDemoSubscriptions(categories: Category[]): Omit<Subscription, 'id'
   return [
     subscription('Netflix', 'Rozrywka', 4300, 8, 6),
     subscription('Siłownia', 'Sport', 12900, 1, 9),
-    subscription('Narzędzie AI', 'AI', 8000, 15, 2),
+    subscription('Narzędzie AI', 'Komputerowe', 8000, 15, 2),
   ];
 }
 

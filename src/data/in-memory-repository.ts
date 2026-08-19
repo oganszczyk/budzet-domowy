@@ -22,6 +22,7 @@ import type {
   CategoryTotal,
   ExpensesRepository,
   NewBillTemplate,
+  NewCategory,
   NewPayment,
   NewSubscription,
   PaymentPatch,
@@ -44,6 +45,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   /** To samo dla subskrypcji (5.3: „nie tworzyć duplikatu płatności"). */
   private generatedSubscriptionPayments = new Set<string>();
   private nextSubscriptionId = 1;
+  private nextCategoryId = 1;
 
   constructor() {
     this.reset();
@@ -55,6 +57,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
 
     this.categories = demo.categories;
+    this.nextCategoryId = this.categories.reduce((max, c) => Math.max(max, c.id), 0) + 1;
     this.nextPaymentId = 1;
     this.payments = demo.paymentSeeds.map((seed) => ({
       ...seed,
@@ -155,6 +158,24 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   async getCategory(id: number): Promise<Category | null> {
     return this.categories.find((c) => c.id === id) ?? null;
+  }
+
+  /**
+   * Tworzy nową podkategorię.
+   *
+   * Nowe podkategorie trafiają na koniec listy (`sortOrder` większy niż
+   * wszystkie dotychczasowe), żeby wbudowane pozostały na swoich miejscach.
+   */
+  async createCategory(input: NewCategory): Promise<Category> {
+    const maxSortOrder = this.categories.reduce((max, c) => Math.max(max, c.sortOrder), 0);
+
+    const category: Category = {
+      ...input,
+      id: this.nextCategoryId++,
+      sortOrder: input.sortOrder ?? maxSortOrder + 1,
+    };
+    this.categories.push(category);
+    return category;
   }
 
   /**

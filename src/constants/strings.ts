@@ -164,6 +164,15 @@ export const strings = {
     },
   },
 
+  /** Tworzenie własnych podkategorii (decyzja do 12.1). */
+  categories: {
+    addNew: 'Dodaj podkategorię',
+    nameLabel: 'Nazwa podkategorii',
+    namePlaceholder: 'np. Zwierzęta',
+    create: 'Dodaj',
+    duplicate: 'Taka podkategoria już istnieje.',
+  },
+
   /** 5.8: szczegóły płatności. */
   paymentDetail: {
     title: 'Szczegóły płatności',

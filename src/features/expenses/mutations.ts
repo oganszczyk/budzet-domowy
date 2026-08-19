@@ -22,6 +22,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { getRepository } from '@/data';
 import type { NewPayment, PaymentPatch } from '@/data/repository';
+import { MainType } from '@/domain/enums';
 import { todayIso } from '@/lib/date';
 
 import { queryKeys } from './queries';
@@ -30,6 +31,27 @@ import { queryKeys } from './queries';
 function useInvalidateExpenses() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: queryKeys.all });
+}
+
+/**
+ * Tworzy własną podkategorię (decyzja do 12.1).
+ *
+ * Nowa podkategoria od razu obsługuje subskrypcje I zakupy — wspólna lista
+ * jest warunkiem tego, żeby przyszła analiza mogła je zsumować.
+ */
+export function useCreateCategory() {
+  const invalidate = useInvalidateExpenses();
+
+  return useMutation({
+    mutationFn: (name: string) =>
+      getRepository().createCategory({
+        name,
+        usedBy: [MainType.SUBSCRIPTION, MainType.PURCHASE],
+        iconKey: 'pricetag-outline',
+        isActive: true,
+      }),
+    onSuccess: invalidate,
+  });
 }
 
 /** Tworzy nową płatność (5.5: ręczne dodanie wydatku). */

@@ -32,6 +32,15 @@ describe('T-01: pierwsze uruchomienie', () => {
     expect(entertainment?.usedBy).toEqual([MainType.SUBSCRIPTION, MainType.PURCHASE]);
   });
 
+  it('AI i chmura są scalone w jedną podkategorię „Komputerowe"', async () => {
+    const categories = await repo().listCategories(MainType.SUBSCRIPTION);
+    const names = categories.map((c) => c.name);
+
+    expect(names).toContain('Komputerowe');
+    expect(names).not.toContain('AI');
+    expect(names).not.toContain('Chmura');
+  });
+
   it('rachunki nie mają podkategorii — jedna kategoria na wszystkie', async () => {
     const bills = await repo().listCategories(MainType.BILL);
     expect(bills).toHaveLength(1);
@@ -51,6 +60,85 @@ describe('T-01: pierwsze uruchomienie', () => {
       subscriptionsGrosze: 0,
       purchasesGrosze: 0,
     });
+  });
+});
+
+describe('createCategory — własne podkategorie (12.1)', () => {
+  it('nowa podkategoria pojawia się w zakupach I w subskrypcjach', async () => {
+    const r = repo();
+    const created = await r.createCategory({
+      name: 'Zwierzęta',
+      usedBy: [MainType.SUBSCRIPTION, MainType.PURCHASE],
+      iconKey: 'pricetag-outline',
+      isActive: true,
+    });
+
+    const forPurchases = await r.listCategories(MainType.PURCHASE);
+    const forSubscriptions = await r.listCategories(MainType.SUBSCRIPTION);
+
+    // Ten sam identyfikator w obu — inaczej analiza nie mogłaby ich zsumować.
+    expect(forPurchases.map((c) => c.id)).toContain(created.id);
+    expect(forSubscriptions.map((c) => c.id)).toContain(created.id);
+  });
+
+  it('nowa podkategoria trafia na koniec listy', async () => {
+    const r = repo();
+    const before = await r.listCategories(MainType.PURCHASE);
+    const created = await r.createCategory({
+      name: 'Zwierzęta',
+      usedBy: [MainType.PURCHASE],
+      iconKey: 'pricetag-outline',
+      isActive: true,
+    });
+
+    const after = await r.listCategories(MainType.PURCHASE);
+    expect(after).toHaveLength(before.length + 1);
+    expect(after[after.length - 1].id).toBe(created.id);
+  });
+
+  it('nie nadpisuje identyfikatorów istniejących kategorii', async () => {
+    const r = repo();
+    const before = await r.listCategories();
+    const created = await r.createCategory({
+      name: 'Zwierzęta',
+      usedBy: [MainType.PURCHASE],
+      iconKey: 'pricetag-outline',
+      isActive: true,
+    });
+
+    expect(before.map((c) => c.id)).not.toContain(created.id);
+  });
+
+  it('nowa podkategoria od razu przyjmuje wydatki i liczy sumę', async () => {
+    const r = repo();
+    const created = await r.createCategory({
+      name: 'Zwierzęta',
+      usedBy: [MainType.PURCHASE],
+      iconKey: 'pricetag-outline',
+      isActive: true,
+    });
+
+    await r.createPayment({
+      mainType: MainType.PURCHASE,
+      categoryId: created.id,
+      title: 'Karma',
+      amountGrosze: 8900,
+      effectiveDate: todayIso(),
+      dueDate: null,
+      paidDate: null,
+      status: null,
+      source: PaymentSource.MANUAL,
+      merchant: 'Zoo Karina',
+      description: null,
+      paymentMethod: null,
+      billTemplateId: null,
+      subscriptionId: null,
+      receiptImagePath: null,
+    });
+
+    const totals = await r.getCategoryTotals(THIS_MONTH, MainType.PURCHASE);
+    const entry = totals.find((t) => t.category.id === created.id);
+    expect(entry?.totalGrosze).toBe(8900);
   });
 });
 

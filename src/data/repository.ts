@@ -37,6 +37,9 @@ export type NewSubscription = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt
 /** Pola, które wolno zmienić w subskrypcji. */
 export type SubscriptionPatch = Partial<NewSubscription>;
 
+/** Dane potrzebne do utworzenia podkategorii (7.1). */
+export type NewCategory = Omit<Category, 'id' | 'sortOrder'> & { sortOrder?: number };
+
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
   category: Category;
@@ -55,6 +58,13 @@ export interface ExpensesRepository {
 
   /** Lista aktywnych kategorii, opcjonalnie tylko dla jednej kategorii głównej. */
   listCategories(mainType?: MainType): Promise<Category[]>;
+
+  /**
+   * 12.1: specyfikacja zostawiała otwarte pytanie, czy użytkownik może
+   * tworzyć własne kategorie. Decyzja właściciela projektu: tak, ale
+   * WYŁĄCZNIE podkategorie — kategorie główne pozostają trzy (BR-01).
+   */
+  createCategory(input: NewCategory): Promise<Category>;
 
   // --- Sumy (6.1, BR-09) ---
 

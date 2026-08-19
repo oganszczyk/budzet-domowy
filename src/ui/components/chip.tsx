@@ -31,8 +31,20 @@ export function Chip({ label, selected, onPress }: ChipProps) {
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
+      /**
+       * Rola „radio", nie „button".
+       *
+       * Chip to wybór jednej opcji z listy, a nie zwykły przycisk. Przy roli
+       * „button" React Native Web nie wystawia żadnego atrybutu mówiącego,
+       * która opcja jest wybrana — czytnik ekranu nie miałby jak tego podać,
+       * bo zaznaczenie niesie wtedy wyłącznie kolor.
+       */
+      role="radio"
+      // `aria-checked` (React Native 0.71+) działa i na telefonie, i w sieci.
+      // Sam `accessibilityState` nie wystawia tu atrybutu w React Native Web.
+      aria-checked={selected}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, selected }}
       accessibilityLabel={label}
       style={({ pressed }) => [styles.chip, selected && styles.selected, pressed && styles.pressed]}
     >

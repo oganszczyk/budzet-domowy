@@ -24,7 +24,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { strings } from '@/constants/strings';
 import { MainType, PaymentMethod, PaymentSource } from '@/domain/enums';
-import { useCreatePayment } from '@/features/expenses/mutations';
+import { useCreateCategory, useCreatePayment } from '@/features/expenses/mutations';
 import { useCategories } from '@/features/expenses/queries';
 import { useMonth } from '@/features/month/month-context';
 import {
@@ -38,6 +38,7 @@ import {
 import { validateAmountGrosze } from '@/lib/money';
 import { AmountInput } from '@/ui/components/amount-input';
 import { Button } from '@/ui/components/button';
+import { CategoryPicker } from '@/ui/components/category-picker';
 import { Chip, chipRowStyle } from '@/ui/components/chip';
 import { Screen } from '@/ui/components/screen';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
@@ -59,6 +60,7 @@ export default function NewPurchaseScreen() {
   const params = useLocalSearchParams<{ categoryId?: string }>();
   const { data: categories } = useCategories(MainType.PURCHASE);
   const createPayment = useCreatePayment();
+  const createCategory = useCreateCategory();
 
   const [amountGrosze, setAmountGrosze] = useState<number | null>(null);
   const [amountText, setAmountText] = useState('');
@@ -167,16 +169,13 @@ export default function NewPurchaseScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>{strings.purchases.category}</Text>
-          <View style={styles.chips}>
-            {(categories ?? []).map((category) => (
-              <Chip
-                key={category.id}
-                label={category.name}
-                selected={category.id === categoryId}
-                onPress={() => setCategoryId(category.id)}
-              />
-            ))}
-          </View>
+          <CategoryPicker
+            categories={categories ?? []}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            onCreate={(name) => createCategory.mutateAsync(name)}
+            isCreating={createCategory.isPending}
+          />
         </View>
 
         <View style={styles.field}>

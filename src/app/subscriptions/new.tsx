@@ -13,11 +13,13 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { strings } from '@/constants/strings';
 import { FrequencyType, MainType } from '@/domain/enums';
 import { useCategories } from '@/features/expenses/queries';
+import { useCreateCategory } from '@/features/expenses/mutations';
 import { useCreateSubscription } from '@/features/subscriptions/queries';
 import { daysInMonth, currentYearMonth, dueDateFor, formatDate, todayIso } from '@/lib/date';
 import { validateAmountGrosze } from '@/lib/money';
 import { AmountInput } from '@/ui/components/amount-input';
 import { Button } from '@/ui/components/button';
+import { CategoryPicker } from '@/ui/components/category-picker';
 import { Chip, chipRowStyle } from '@/ui/components/chip';
 import { Screen } from '@/ui/components/screen';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
@@ -37,6 +39,7 @@ export default function NewSubscriptionScreen() {
   const router = useRouter();
   const { data: categories } = useCategories(MainType.SUBSCRIPTION);
   const createSubscription = useCreateSubscription();
+  const createCategory = useCreateCategory();
 
   const [name, setName] = useState('');
   const [amountGrosze, setAmountGrosze] = useState<number | null>(null);
@@ -163,16 +166,13 @@ export default function NewSubscriptionScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>{strings.subscriptions.categoryLabel}</Text>
-          <View style={styles.chips}>
-            {(categories ?? []).map((category) => (
-              <Chip
-                key={category.id}
-                label={category.name}
-                selected={category.id === categoryId}
-                onPress={() => setCategoryId(category.id)}
-              />
-            ))}
-          </View>
+          <CategoryPicker
+            categories={categories ?? []}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            onCreate={(name) => createCategory.mutateAsync(name)}
+            isCreating={createCategory.isPending}
+          />
         </View>
 
         <View style={styles.actions}>
