@@ -101,6 +101,18 @@ function dayIn(month: YearMonth, day: number): string {
 
 const NOW = new Date().toISOString();
 
+/**
+ * Szablony w danych demonstracyjnych udają, że istnieją od roku.
+ * Automatyczne tworzenie rachunków (5.2) nie cofa się przed datę powstania
+ * szablonu, więc bez tego przeglądanie wcześniejszych miesięcy nie miałoby
+ * czego pokazać.
+ */
+const TEMPLATE_CREATED_AT = (() => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 1);
+  return date.toISOString();
+})();
+
 /** Płatność demonstracyjna bez pól nadawanych przez repozytorium. */
 export type PaymentSeed = Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -251,8 +263,8 @@ function buildDemoBillTemplates(categories: Category[]): Omit<BillTemplate, 'id'
     isActive: true,
     useFixedAmount,
     fixedAmountGrosze,
-    createdAt: NOW,
-    updatedAt: NOW,
+    createdAt: TEMPLATE_CREATED_AT,
+    updatedAt: TEMPLATE_CREATED_AT,
   });
 
   return [

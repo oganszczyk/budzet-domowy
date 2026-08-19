@@ -13,10 +13,18 @@
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
 import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
-import { monthRange, todayIso, type YearMonth } from '@/lib/date';
+import { monthRange, todayIso, yearMonthOf, type YearMonth } from '@/lib/date';
 
 import { buildDemoData } from './demo-data';
-import type { CategoryTotal, ExpensesRepository, NewPayment, PaymentPatch } from './repository';
+import type {
+  BillAmountHistoryEntry,
+  BillTemplatePatch,
+  CategoryTotal,
+  ExpensesRepository,
+  NewBillTemplate,
+  NewPayment,
+  PaymentPatch,
+} from './repository';
 
 export class InMemoryExpensesRepository implements ExpensesRepository {
   private categories: Category[] = [];
@@ -24,6 +32,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   private billTemplates: BillTemplate[] = [];
   private subscriptions: Subscription[] = [];
   private nextPaymentId = 1;
+  private nextBillTemplateId = 1;
 
   constructor() {
     this.reset();
@@ -42,9 +51,10 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       createdAt: now,
       updatedAt: now,
     }));
-    this.billTemplates = demo.billTemplates.map((template, index) => ({
+    this.nextBillTemplateId = 1;
+    this.billTemplates = demo.billTemplates.map((template) => ({
       ...template,
-      id: index + 1,
+      id: this.nextBillTemplateId++,
     }));
     this.subscriptions = demo.subscriptions.map((subscription, index) => ({
       ...subscription,
@@ -151,11 +161,79 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.payments = this.payments.filter((p) => p.id !== id);
   }
 
-  // --- Szablony cykliczne ---
+  // --- Szablony rachunków (7.3) ---
 
   async listBillTemplates(): Promise<BillTemplate[]> {
     return this.billTemplates.filter((t) => t.isActive);
   }
+
+  async getBillTemplate(id: number): Promise<BillTemplate | null> {
+    return this.billTemplates.find((t) => t.id === id) ?? null;
+  }
+
+  async createBillTemplate(input: NewBillTemplate): Promise<BillTemplate> {
+    const now = new Date().toISOString();
+    const template: BillTemplate = {
+      ...input,
+      id: this.nextBillTemplateId++,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.billTemplates.push(template);
+    return template;
+  }
+
+  async updateBillTemplate(id: number, patch: BillTemplatePatch): Promise<BillTemplate> {
+    const index = this.billTemplates.findIndex((t) => t.id === id);
+    if (index === -1) throw new Error(`Nie znaleziono szablonu rachunku o id ${id}.`);
+
+    const updated: BillTemplate = {
+      ...this.billTemplates[index],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    this.billTemplates[index] = updated;
+    return updated;
+  }
+
+  /**
+   * 7.5: „Usunięcie kategorii z historią powinno oznaczać isActive=false,
+   * nie fizyczne kasowanie." Tak samo traktujemy szablony rachunków —
+   * wyłączamy je, żeby nie stracić historycznych płatności (BR-07).
+   */
+  async deactivateBillTemplate(id: number): Promise<void> {
+    await this.updateBillTemplate(id, { isActive: false });
+  }
+
+  /** BR-12: czy dla tego szablonu istnieje już rekord na wskazany miesiąc? */
+  async findBillForTemplateAndMonth(
+    billTemplateId: number,
+    month: YearMonth
+  ): Promise<Payment | null> {
+    const { start, end } = monthRange(month);
+    const found = this.payments.find(
+      (p) =>
+        p.billTemplateId === billTemplateId && p.effectiveDate >= start && p.effectiveDate <= end
+    );
+    return found ? this.withComputedStatus(found) : null;
+  }
+
+  /**
+   * 5.2: „Historia wcześniejszych kwot dla tego samego szablonu."
+   * Pokazujemy tylko miesiące z uzupełnioną kwotą, od najnowszych.
+   */
+  async listBillAmountHistory(billTemplateId: number): Promise<BillAmountHistoryEntry[]> {
+    return this.payments
+      .filter((p) => p.billTemplateId === billTemplateId && p.amountGrosze !== null)
+      .sort((a, b) => (a.effectiveDate < b.effectiveDate ? 1 : -1))
+      .map((p) => ({
+        paymentId: p.id,
+        month: yearMonthOf(p.effectiveDate),
+        amountGrosze: p.amountGrosze as number,
+      }));
+  }
+
+  // --- Subskrypcje (7.4) ---
 
   async listSubscriptions(): Promise<Subscription[]> {
     return [...this.subscriptions];

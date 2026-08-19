@@ -1,0 +1,252 @@
+/**
+ * 5.2: „Przycisk dodawania pozwala utworzyć nowy typ rachunku cyklicznego."
+ *
+ * Formularz szablonu rachunku (7.3). Po zapisaniu od razu generujemy rekord
+ * na bieżąco wybrany miesiąc, żeby użytkownik zobaczył efekt natychmiast,
+ * a nie dopiero po przełączeniu miesiąca.
+ */
+
+import { Stack, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+
+import { getRepository } from '@/data';
+import { strings } from '@/constants/strings';
+import { MainType } from '@/domain/enums';
+import { generateMonthlyBills } from '@/features/bills/generate-monthly-bills';
+import { useCreateBillTemplate } from '@/features/bills/queries';
+import { useCategories } from '@/features/expenses/queries';
+import { useMonth } from '@/features/month/month-context';
+import { validateAmountGrosze } from '@/lib/money';
+import { AmountInput } from '@/ui/components/amount-input';
+import { Button } from '@/ui/components/button';
+import { Screen } from '@/ui/components/screen';
+import { colors, fontSize, radius, spacing } from '@/ui/theme';
+
+/** 6.2: nazwa pozycji ma 1-80 znaków. */
+const MAX_NAME_LENGTH = 80;
+
+export default function NewBillTemplateScreen() {
+  const router = useRouter();
+  const { month } = useMonth();
+  const { data: categories } = useCategories(MainType.BILL);
+  const createTemplate = useCreateBillTemplate();
+
+  const [name, setName] = useState('');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [dueDayText, setDueDayText] = useState('10');
+  const [useFixedAmount, setUseFixedAmount] = useState(false);
+  const [fixedAmountGrosze, setFixedAmountGrosze] = useState<number | null>(null);
+
+  const dueDay = Number(dueDayText);
+  const dueDayValid = Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31;
+
+  const nameValid = name.trim().length > 0 && name.trim().length <= MAX_NAME_LENGTH;
+  const fixedAmountValid = !useFixedAmount || validateAmountGrosze(fixedAmountGrosze).ok;
+
+  const canSave = nameValid && dueDayValid && categoryId !== null && fixedAmountValid;
+
+  const handleSave = () => {
+    if (!canSave || categoryId === null) return;
+
+    createTemplate.mutate(
+      {
+        name: name.trim(),
+        categoryId,
+        defaultDueDay: dueDay,
+        isActive: true,
+        useFixedAmount,
+        fixedAmountGrosze: useFixedAmount ? fixedAmountGrosze : null,
+      },
+      {
+        onSuccess: async () => {
+          // Utwórz rekord na wybrany miesiąc, żeby nowy rachunek
+          // pojawił się na liście od razu (BR-12 chroni przed duplikatem).
+          await generateMonthlyBills(getRepository(), month);
+          router.back();
+        },
+      }
+    );
+  };
+
+  return (
+    <>
+      <Stack.Screen options={{ title: strings.bills.newTemplate.title }} />
+
+      <Screen>
+        <View style={styles.field}>
+          <Text style={styles.label}>{strings.bills.newTemplate.nameLabel}</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder={strings.bills.newTemplate.namePlaceholder}
+            placeholderTextColor={colors.textMuted}
+            maxLength={MAX_NAME_LENGTH}
+            accessibilityLabel={strings.bills.newTemplate.nameLabel}
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>{strings.bills.newTemplate.categoryLabel}</Text>
+          <View style={styles.chips}>
+            {(categories ?? []).map((category) => {
+              const selected = category.id === categoryId;
+              return (
+                <Pressable
+                  key={category.id}
+                  onPress={() => setCategoryId(category.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={category.name}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    selected && styles.chipSelected,
+                    pressed && styles.chipPressed,
+                  ]}
+                >
+                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                    {category.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>{strings.bills.newTemplate.dueDayLabel}</Text>
+          <TextInput
+            value={dueDayText}
+            onChangeText={setDueDayText}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            maxLength={2}
+            accessibilityLabel={strings.bills.newTemplate.dueDayLabel}
+            style={[styles.input, styles.inputNarrow, !dueDayValid && styles.inputError]}
+          />
+          {!dueDayValid ? (
+            <Text style={styles.error}>{strings.bills.newTemplate.dueDayInvalid}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.field}>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>{strings.bills.newTemplate.fixedAmountToggle}</Text>
+            <Switch
+              value={useFixedAmount}
+              onValueChange={setUseFixedAmount}
+              accessibilityLabel={strings.bills.newTemplate.fixedAmountToggle}
+              trackColor={{ true: colors.primary, false: colors.border }}
+            />
+          </View>
+          <Text style={styles.hint}>{strings.bills.newTemplate.fixedAmountHint}</Text>
+        </View>
+
+        {useFixedAmount ? (
+          <View style={styles.field}>
+            <AmountInput
+              label={strings.bills.newTemplate.fixedAmountLabel}
+              initialGrosze={fixedAmountGrosze}
+              onChangeGrosze={(grosze) => setFixedAmountGrosze(grosze)}
+              error={fixedAmountValid ? null : strings.validation.amountEmpty}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.actions}>
+          <Button
+            label={strings.common.save}
+            icon="checkmark"
+            onPress={handleSave}
+            disabled={!canSave}
+            loading={createTemplate.isPending}
+          />
+          <Button label={strings.common.cancel} variant="secondary" onPress={() => router.back()} />
+        </View>
+      </Screen>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  field: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  label: {
+    fontSize: fontSize.caption,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.body,
+    color: colors.text,
+  },
+  inputNarrow: {
+    width: 88,
+    textAlign: 'center',
+  },
+  inputError: {
+    borderColor: colors.statusOverdue,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  chip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  chipSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  chipPressed: {
+    opacity: 0.7,
+  },
+  chipText: {
+    fontSize: fontSize.body,
+    color: colors.text,
+  },
+  chipTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  switchLabel: {
+    flex: 1,
+    fontSize: fontSize.body,
+    color: colors.text,
+  },
+  hint: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+  },
+  error: {
+    fontSize: fontSize.caption,
+    color: colors.statusOverdue,
+  },
+  actions: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+});

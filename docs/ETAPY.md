@@ -51,7 +51,25 @@ możliwy do zaliczenia dopiero po Etapie 1b.
 - [x] Dodać przejścia do szczegółów kategorii
 - [x] Sprawdzić aktualizację sum po zmianie miesiąca
 
-## Etap 3 — rachunki ⬜
+## Etap 3 — rachunki ✅ ZAKOŃCZONY
+
+- [x] Zaimplementować listę rachunków dla wybranego miesiąca
+- [x] Zaimplementować formularz szablonu rachunku
+- [x] Zaimplementować automatyczne tworzenie miesięcznych rekordów (BR-12)
+- [x] Zaimplementować edycję kwoty, terminu i statusu
+- [x] Zaimplementować automatyczny status „Po terminie" (BR-11)
+- [x] Dodać historię wcześniejszych kwot rachunku
+
+Sprawdzone w działającej aplikacji:
+
+| Sprawdzenie                                     | Wynik                                                |
+| ----------------------------------------------- | ---------------------------------------------------- |
+| Cztery statusy widoczne jednocześnie            | Opłacony, Do zapłaty, Po terminie, Oczekuje na kwotę |
+| AC 5.2: rachunek bez kwoty nie zwiększa sumy    | Woda pominięta w sumie 2 855,59 zł                   |
+| AC 5.2: po wpisaniu kwoty suma się aktualizuje  | 2 855,59 → 2 898,09 zł bez restartu                  |
+| T-07: oznaczenie jako opłacony                  | status + data 19.08.2026 zapisane                    |
+| 6.1: opłacony rachunek nadal wlicza się do sumy | suma bez zmian po opłaceniu                          |
+| Nowy szablon rachunku                           | „Śmieci" dodane, stan Oczekuje na kwotę              |
 
 ## Etap 4 — subskrypcje ⬜
 

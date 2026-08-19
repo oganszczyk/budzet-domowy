@@ -25,10 +25,23 @@ export type NewPayment = Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>;
 /** Pola, które wolno zmienić w istniejącej płatności. */
 export type PaymentPatch = Partial<Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>>;
 
+/** Dane potrzebne do utworzenia szablonu rachunku cyklicznego. */
+export type NewBillTemplate = Omit<BillTemplate, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** Pola, które wolno zmienić w szablonie rachunku. */
+export type BillTemplatePatch = Partial<NewBillTemplate>;
+
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
   category: Category;
   totalGrosze: number;
+};
+
+/** 5.2: pozycja historii wcześniejszych kwot tego samego rachunku. */
+export type BillAmountHistoryEntry = {
+  paymentId: number;
+  month: YearMonth;
+  amountGrosze: number;
 };
 
 export interface ExpensesRepository {
@@ -61,8 +74,25 @@ export interface ExpensesRepository {
   updatePayment(id: number, patch: PaymentPatch): Promise<Payment>;
   deletePayment(id: number): Promise<void>;
 
-  // --- Szablony cykliczne (7.3, 7.4) ---
+  // --- Szablony rachunków (7.3) ---
 
   listBillTemplates(): Promise<BillTemplate[]>;
+  getBillTemplate(id: number): Promise<BillTemplate | null>;
+  createBillTemplate(input: NewBillTemplate): Promise<BillTemplate>;
+  updateBillTemplate(id: number, patch: BillTemplatePatch): Promise<BillTemplate>;
+  /** 7.5: szablon z historią ukrywamy (isActive=false), a nie kasujemy fizycznie. */
+  deactivateBillTemplate(id: number): Promise<void>;
+
+  /**
+   * BR-12: sprawdza, czy dla danego szablonu istnieje już rekord na ten miesiąc.
+   * Używane przy automatycznym tworzeniu, żeby nie powstał duplikat.
+   */
+  findBillForTemplateAndMonth(billTemplateId: number, month: YearMonth): Promise<Payment | null>;
+
+  /** 5.2: historia wcześniejszych kwot dla tego samego szablonu. */
+  listBillAmountHistory(billTemplateId: number): Promise<BillAmountHistoryEntry[]>;
+
+  // --- Subskrypcje (7.4) ---
+
   listSubscriptions(): Promise<Subscription[]>;
 }

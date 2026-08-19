@@ -10,7 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '@/ui/theme';
 
 type ScreenProps = {
-  children: ReactNode;
+  /** Opcjonalne — pusty ekran jest poprawnym stanem podczas wczytywania danych. */
+  children?: ReactNode;
   /** Gdy `false`, treść nie jest przewijana (np. ekran z własną listą). */
   scrollable?: boolean;
   /** Gdy `true`, treść jest wyśrodkowana w pionie (ekrany zastępcze). */
