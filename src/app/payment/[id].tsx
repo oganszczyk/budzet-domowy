@@ -30,6 +30,7 @@ import { formatGrosze, validateAmountGrosze } from '@/lib/money';
 import { AmountInput } from '@/ui/components/amount-input';
 import { Button } from '@/ui/components/button';
 import { Card } from '@/ui/components/card';
+import { DetailRow } from '@/ui/components/detail-row';
 import { Screen } from '@/ui/components/screen';
 import { StatusBadge } from '@/ui/components/status-badge';
 import { confirm } from '@/ui/confirm';
@@ -161,15 +162,6 @@ export default function PaymentDetailScreen() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   summary: {
     gap: spacing.sm,
@@ -188,24 +180,6 @@ const styles = StyleSheet.create({
   details: {
     marginTop: spacing.lg,
     gap: spacing.sm,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.xs,
-    gap: spacing.md,
-  },
-  detailLabel: {
-    fontSize: fontSize.body,
-    color: colors.textMuted,
-  },
-  detailValue: {
-    flex: 1,
-    fontSize: fontSize.body,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'right',
   },
   section: {
     marginTop: spacing.lg,

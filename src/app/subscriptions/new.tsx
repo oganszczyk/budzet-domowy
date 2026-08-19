@@ -225,6 +225,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   resolved: {
+    // Bez tego data gubi ostatnia cyfre roku (19.08.202 zamiast 19.08.2026).
+    // Element w wierszu flex moze skurczyc sie ponizej swojej tresci.
+    flexShrink: 0,
     fontSize: fontSize.body,
     color: colors.textMuted,
   },
