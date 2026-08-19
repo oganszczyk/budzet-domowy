@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# smoke-test build output
+.expo-smoke/

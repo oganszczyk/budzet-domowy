@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Dom",
+    "name": "Domowe wydatki",
     "slug": "dom-apka",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "domapka",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },

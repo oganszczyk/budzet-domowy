@@ -1,63 +1,64 @@
-# Dom
+# Domowe wydatki
 
-Mobile app built with [Expo](https://expo.dev) (SDK 57) and React Native.
+Aplikacja mobilna do rejestrowania i kontrolowania wydatków domowych:
+rachunków, subskrypcji i zakupów. Działa offline, dla jednej osoby, bez kont
+i bez chmury.
 
-## Stack
+Zbudowana z [Expo](https://expo.dev) SDK 57 i React Native, według
+`docs/Specyfikacja_aplikacji_wydatki_domowe.pdf`.
 
-| Piece      | Choice                                    |
-| ---------- | ----------------------------------------- |
-| Framework  | Expo SDK 57 / React Native 0.86            |
-| Routing    | expo-router (file-based, typed routes)     |
-| Language   | TypeScript (strict)                        |
-| Compiler   | React Compiler enabled                     |
-| Quality    | ESLint (eslint-config-expo) + Prettier     |
-
-## Getting started
+## Uruchomienie
 
 ```bash
 npm install
 npm start
 ```
 
-Then press `a` for Android, `w` for web, or scan the QR code with **Expo Go** on your phone.
-iOS simulator needs macOS; Expo Go on an iPhone works from Windows.
+Następnie zeskanuj kod QR aplikacją **Expo Go** na telefonie, albo naciśnij
+`w`, żeby otworzyć aplikację w przeglądarce.
 
-## Scripts
+## Stan prac
 
-| Command                | What it does                        |
-| ---------------------- | ----------------------------------- |
-| `npm start`            | Start the Metro dev server          |
-| `npm run android`      | Start and open the Android emulator |
-| `npm run web`          | Start and open in the browser       |
-| `npm run lint`         | ESLint                              |
-| `npm run lint:fix`     | ESLint with autofix                 |
-| `npm run format`       | Prettier write                      |
-| `npm run typecheck`    | `tsc --noEmit`                      |
-| `npm run doctor`       | expo-doctor project health check    |
-| `npm run reset-project`| Strip the demo screens (one-way)    |
+Zakończony **Etap 0** — szkielet aplikacji: nawigacja, motyw, formatowanie pl-PL.
+Szczegółowy postęp: [`docs/ETAPY.md`](docs/ETAPY.md).
 
-## Layout
+## Skrypty
+
+| Polecenie           | Działanie                           |
+| ------------------- | ----------------------------------- |
+| `npm start`         | Serwer deweloperski Metro           |
+| `npm run android`   | Uruchomienie na emulatorze Androida |
+| `npm run web`       | Uruchomienie w przeglądarce         |
+| `npm test`          | Testy jednostkowe                   |
+| `npm run typecheck` | Sprawdzenie typów TypeScript        |
+| `npm run lint`      | ESLint                              |
+| `npm run format`    | Prettier                            |
+| `npm run doctor`    | Kontrola zdrowia projektu Expo      |
+
+## Struktura
 
 ```
 src/
-  app/           file-based routes — a file here becomes a screen
-    _layout.tsx  root layout (tabs)
-    index.tsx    "/"
-    explore.tsx  "/explore"
-  components/    reusable UI
-  constants/     theme tokens
-  hooks/         shared hooks
-assets/          images, icons, splash
+  app/          trasy — plik = ekran (expo-router)
+    (tabs)/     ekrany z dolnym paskiem: Główna, Historia, Analiza
+    bills/      rachunki domowe
+    subscriptions/
+    purchases/
+  ui/           komponenty wspólne i motyw
+  features/     przypadki użycia (warstwa Application)
+  domain/       modele, enumy, reguły biznesowe
+  data/         SQLite, repozytoria, migracje
+  lib/          funkcje pomocnicze: kwoty, daty
+  constants/    teksty interfejsu (po polsku)
+docs/           specyfikacja i plan etapów
 ```
 
-Imports use the `@/` alias for `src/` and `@/assets/` for `assets/`.
+Import przez alias `@/` wskazuje na `src/`.
 
-## Environment variables
+## Najważniejsze zasady
 
-Copy `.env.example` to `.env.local`. Only variables prefixed `EXPO_PUBLIC_` are
-readable from app code — never put secrets in them, they ship in the bundle.
+- **Kwoty w groszach.** `125,50 zł` zapisujemy jako `12550`. Nigdy jako `125.50`.
+- **Interfejs po polsku, kod po angielsku.**
+- **Daty jako tekst ISO** `RRRR-MM-DD`.
 
-## Notes
-
-`src/` still contains Expo's starter demo screens. Run `npm run reset-project`
-to clear them out, or replace them as the real screens take shape.
+Pełna lista: [`AGENTS.md`](AGENTS.md).

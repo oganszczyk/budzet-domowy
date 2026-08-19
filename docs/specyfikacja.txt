@@ -1,0 +1,1270 @@
+
+
+===== PAGE 1/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 1
+
+SPECYFIKACJA APLIKACJI
+
+Domowe wydatki w jednym miejscu
+
+Wizja produktu, zakres MVP i lista zadań wdrożeniowych
+
+PLATFORMA
+
+Android / Flutter
+
+TRYB
+
+Offline, jedna osoba
+
+WERSJA
+
+0.1 - MVP
+
+Dokument przeznaczony do przekazania agentowi AI generującemu kod
+
+Data: 28 lipca 2026 r.
+
+
+===== PAGE 2/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 2
+
+1. Cel dokumentu
+
+Dokument opisuje pierwszą wersję aplikacji mobilnej do rejestrowania, kontrolowania, kategoryzowania i analizowania
+
+wydatków domowych. Ma być bezpośrednią instrukcją dla agenta AI tworzącego kod, dlatego rozdziela wymagania na
+
+funkcje, reguły biznesowe, dane, ekrany, etapy wykonania i kryteria akceptacji.
+
+Najważniejsza zasada wdrożenia
+
+Agent powinien budować aplikację etapami. Po każdym etapie aplikacja ma się uruchamiać, kompilować i zachowywać
+
+istniejące dane. Nie należy wdrażać wszystkich modułów jednocześnie.
+
+1.1. Jak czytać checklistę
+
+Oznaczenie Znaczenie
+
+[ ] zadanie niewykonane
+
+[x] zadanie wykonane lub decyzja już zatwierdzona
+
+P0 funkcja konieczna do działania MVP
+
+P1 funkcja ważna, wdrażana po podstawach
+
+P2 funkcja dodatkowa lub późniejsza
+
+AC kryterium akceptacji: warunek uznania funkcji za gotową
+
+1.2. Instrukcja dla agenta AI
+
+[ ] P0 Przed rozpoczęciem etapu utworzyć krótką listę plików, które będą dodane lub zmienione.
+
+[ ] P0 Nie usuwać działających funkcji podczas dodawania kolejnego modułu.
+
+[ ] P0 Po każdym etapie uruchomić analizę kodu, kompilację i test podstawowego przepływu użytkownika.
+
+[ ] P0 Stosować migracje bazy danych zamiast kasowania lokalnej bazy przy zmianach schematu.
+
+[ ] P0 Kwoty przechowywać jako całkowitą liczbę groszy, np. 125,50 zł jako 12550.
+
+[ ] P0 Nazwy klas i zmiennych mogą być angielskie, ale cały interfejs użytkownika ma być po polsku.
+
+2. Wizja produktu
+
+Wizja
+
+Jedna prosta aplikacja na telefon, która pokazuje, ile pieniędzy zostało wydane w danym miesiącu na rachunki domowe,
+
+subskrypcje oraz pozostałe zakupy, a także pozwala szybko dodać wydatek ręcznie lub poprzez skan paragonu.
+
+2.1. Problem użytkownika
+
+- Rachunki, subskrypcje i zakupy są obecnie rozproszone i trudne do porównania.
+
+- Koszty cykliczne łatwo przeoczyć lub opłacać bez kontroli ich łącznej wartości.
+
+- Ręczne przepisywanie danych z paragonów jest czasochłonne.
+
+- Brakuje jednego miesięcznego podsumowania wszystkich wydatków.
+
+2.2. Docelowy efekt MVP
+
+[x] Po otwarciu aplikacji użytkownik od razu widzi bieżący miesiąc i trzy główne sumy.
+
+[x] Rachunki tworzą się co miesiąc jako pozycje oczekujące na kwotę i opłacenie.
+
+[x] Subskrypcje przenoszą się automatycznie na kolejne okresy.
+
+[x] Zakup można dodać ręcznie albo zeskanować paragon i potwierdzić sklep, datę i kwotę.
+
+[x] Każda zapisana płatność trafia do jednej chronologicznej historii.
+
+
+===== PAGE 3/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 3
+
+2.3. Zasady projektowe
+
+Zasada Interpretacja
+
+Prostota
+Najważniejsze informacje widoczne bez przechodzenia przez wiele
+
+ekranów.
+
+Offline first
+Dane działają bez internetu i są przechowywane lokalnie na
+
+urządzeniu.
+
+Jedna osoba Brak kont, logowania, ról i współdzielonych gospodarstw w MVP.
+
+Kontrola użytkownika OCR niczego nie zapisuje bez ręcznego potwierdzenia.
+
+Spójna historia
+Wszystkie typy płatności są prezentowane w jednym wspólnym
+
+formacie.
+
+Rozbudowa bez przepisywania
+Model danych ma umożliwić późniejsze dodanie synchronizacji i
+
+wielu użytkowników.
+
+3. Zakres projektu
+
+3.1. Zakres MVP - funkcje objęte dokumentem
+
+[ ] P0 Ekran główny z miesiącem, rokiem i trzema kategoriami głównymi.
+
+[ ] P0 Dolny pasek nawigacyjny: Strona główna, Historia, Analiza.
+
+[ ] P0 Moduł rachunków domowych ze statusami i automatycznym tworzeniem kolejnych miesięcy.
+
+[ ] P0 Moduł subskrypcji z cyklicznością oraz potwierdzaniem dalszego korzystania.
+
+[ ] P0 Moduł wydatków i zakupów z podkategoriami.
+
+[ ] P0 Ręczne dodawanie wydatku.
+
+[ ] P0 Uproszczone skanowanie paragonu: sklep, data i łączna kwota.
+
+[ ] P0 Historia wszystkich zapisanych płatności.
+
+[ ] P0 Szczegóły, edycja i usuwanie płatności.
+
+[ ] P0 Lokalna baza danych i dane testowe dla pierwszego uruchomienia.
+
+3.2. Poza zakresem obecnej wersji
+
+[ ] P2 Logowanie, rejestracja i konta wielu użytkowników.
+
+[ ] P2 Synchronizacja między urządzeniami i chmura.
+
+[ ] P2 Integracja z rachunkiem bankowym.
+
+[ ] P2 Automatyczne rozpoznawanie wszystkich produktów z paragonu.
+
+[ ] P2 Automatyczne przypisywanie każdego produktu do osobnej kategorii.
+
+[ ] P2 Publikacja w sklepie Google Play lub App Store.
+
+[ ] P2 Eksport do PDF/Excel, kopie zapasowe i import danych - późniejszy etap.
+
+[ ] P2 Szczegółowy ekran analiz - zostanie opisany w osobnej aktualizacji specyfikacji.
+
+4. Architektura informacji i nawigacja
+
+4.1. Główna mapa ekranów
+
+Poziom 1 Poziom 2 Poziom 3
+
+Strona główna Rachunki domowe Szczegóły rachunku / edycja
+
+Strona główna Subskrypcje Szczegóły subskrypcji / edycja
+
+Strona główna Wydatki i zakupy Podkategoria / lista zakupów
+
+Wydatki i zakupy Dodaj ręcznie Potwierdzenie zapisu
+
+Wydatki i zakupy Skanuj paragon Weryfikacja OCR
+
+
+===== PAGE 4/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 4
+
+Poziom 1 Poziom 2 Poziom 3
+
+Dolna nawigacja Historia Szczegóły płatności
+
+Dolna nawigacja Analiza
+Ekran tymczasowy do czasu osobnej
+
+specyfikacji
+
+4.2. Dolny pasek nawigacyjny
+
+[ ] P0 Pasek jest widoczny na ekranach głównych: Strona główna, Historia i Analiza.
+
+[ ] P0 Ikona domu otwiera stronę główną.
+
+[ ] P0 Ikona listy lub zegara otwiera historię wszystkich płatności.
+
+[ ] P0 Ikona wykresu otwiera ekran analizy.
+
+[ ] P0 Aktywna ikona jest wizualnie wyróżniona.
+
+[ ] P0 Naciśnięcie aktywnej ikony nie tworzy kolejnej kopii ekranu w stosie nawigacji.
+
+4.3. Obsługa miesiąca i roku
+
+[ ] P0 Domyślnie wyświetlany jest aktualny miesiąc i rok urządzenia.
+
+[ ] P0 Użytkownik może przejść do poprzedniego lub następnego miesiąca.
+
+[ ] P0 Zmiana miesiąca aktualizuje wszystkie sumy na ekranie głównym.
+
+[ ] P0 Przejście do przyszłego miesiąca może pokazać oczekujące rachunki i planowane subskrypcje.
+
+[ ] P0 Wybrany miesiąc pozostaje aktywny podczas przechodzenia do szczegółów kategorii.
+
+
+===== PAGE 5/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 5
+
+5. Specyfikacja ekranów
+
+5.1. Ekran główny - HOME
+
+Cel ekranu
+
+W ciągu kilku sekund użytkownik ma zrozumieć, ile wydał w wybranym miesiącu na trzy podstawowe obszary.
+
+Elementy interfejsu
+
+[ ] P0 Nagłówek z nazwą miesiąca i rokiem, np. „Lipiec 2026”.
+
+[ ] P0 Przycisk lub gest przejścia do poprzedniego miesiąca.
+
+[ ] P0 Przycisk lub gest przejścia do następnego miesiąca.
+
+[ ] P0 Karta „Rachunki domowe” z miesięczną sumą.
+
+[ ] P0 Karta „Subskrypcje” z miesięczną sumą.
+
+[ ] P0 Karta „Wydatki i zakupy” z miesięczną sumą.
+
+[ ] P0 Dolny pasek nawigacyjny.
+
+Zachowanie
+
+[ ] P0 Kliknięcie karty otwiera szczegóły odpowiadającej kategorii.
+
+[ ] P0 Suma rachunków obejmuje pozycje z uzupełnioną kwotą w wybranym miesiącu.
+
+[ ] P0 Suma subskrypcji obejmuje płatności przypadające na wybrany miesiąc.
+
+[ ] P0 Suma wydatków obejmuje wszystkie zakupy ręczne i ze skanu w wybranym miesiącu.
+
+[ ] P0 Kwoty są formatowane w standardzie pl-PL, np. 1 250,50 zł.
+
+[ ] P0 Brak danych jest prezentowany jako 0,00 zł, bez komunikatu błędu.
+
+AC - kryteria akceptacji
+
+[ ] Po dodaniu wydatku suma odpowiedniej karty zmienia się bez restartu aplikacji.
+
+[ ] Zmiana miesiąca wyświetla prawidłowe, niezależne sumy.
+
+[ ] Kliknięcie każdej karty prowadzi do właściwego ekranu.
+
+[ ] Widok poprawnie działa przy kwotach od 0,01 zł do co najmniej 999 999,99 zł.
+
+5.2. Rachunki domowe
+
+Domyślne pozycje
+
+Podkategoria Sposób działania w MVP
+
+Czynsz za mieszkanie pozycja miesięczna, kwota wpisywana ręcznie
+
+Prąd pozycja miesięczna, kwota wpisywana ręcznie
+
+Woda pozycja miesięczna, kwota wpisywana ręcznie
+
+Gaz pozycja miesięczna, kwota wpisywana ręcznie
+
+Internet
+pozycja miesięczna; użytkownik może wpisać stałą lub zmienną
+
+kwotę
+
+Telefon pozycja miesięczna; opcjonalna
+
+Ubezpieczenie pozycja cykliczna; opcjonalna
+
+Inne rachunki pozycje tworzone przez użytkownika
+
+Lista rachunków
+
+[ ] P0 Na górze ekranu wyświetlać łączną sumę rachunków z wybranego miesiąca.
+
+[ ] P0 Każdy wiersz pokazuje nazwę, kwotę lub tekst „Uzupełnij kwotę”, termin oraz status.
+
+[ ] P0 Kliknięcie wiersza otwiera szczegóły rachunku.
+
+[ ] P0 Przycisk dodawania pozwala utworzyć nowy typ rachunku cyklicznego.
+
+
+===== PAGE 6/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 6
+
+Statusy rachunku
+
+Kod Nazwa w interfejsie Warunek
+
+WAITING_AMOUNT Oczekuje na kwotę rekord istnieje, ale kwota jest pusta
+
+TO_PAY Do zapłaty
+kwota jest wpisana, rachunek nieopłacony,
+
+termin nie minął
+
+PAID Opłacony użytkownik oznaczył rachunek jako opłacony
+
+OVERDUE Po terminie
+kwota jest wpisana, nieopłacony i termin
+
+minął
+
+Automatyczne tworzenie
+
+[ ] P0 Dla aktywnego szablonu rachunku tworzyć jeden rekord na każdy miesiąc.
+
+[ ] P0 Nowy rekord dziedziczy nazwę, domyślny dzień terminu i kategorię.
+
+[ ] P0 Nowy rekord nie dziedziczy kwoty, chyba że użytkownik jawnie włączy stałą kwotę.
+
+[ ] P0 Domyślny stan nowego rekordu to WAITING_AMOUNT.
+
+[ ] P0 Nie tworzyć duplikatu, jeżeli rekord na dany miesiąc już istnieje.
+
+Szczegóły rachunku
+
+[ ] P0 Nazwa rachunku.
+
+[ ] P0 Miesiąc i rok.
+
+[ ] P0 Kwota - pole edytowalne.
+
+[ ] P0 Termin płatności.
+
+[ ] P0 Status.
+
+[ ] P0 Data opłacenia - ustawiana przy oznaczeniu jako opłacony.
+
+[ ] P0 Opis opcjonalny.
+
+[ ] P0 Historia wcześniejszych kwot dla tego samego szablonu.
+
+[ ] P0 Przyciski: Zapisz, Oznacz jako opłacony, Edytuj, Usuń.
+
+AC - kryteria akceptacji
+
+[ ] Po wejściu w nowy miesiąc aktywne rachunki pojawiają się bez ręcznego kopiowania.
+
+[ ] Rachunek bez kwoty nie zwiększa sumy na ekranie głównym.
+
+[ ] Po wpisaniu kwoty suma aktualizuje się poprawnie.
+
+[ ] Nieopłacony rachunek po terminie automatycznie otrzymuje status „Po terminie”.
+
+[ ] Rachunek oznaczony jako opłacony zachowuje datę opłacenia.
+
+5.3. Subskrypcje
+
+Lista subskrypcji
+
+[ ] P0 Na górze wyświetlać sumę kosztów subskrypcji przypadających na wybrany miesiąc.
+
+[ ] P0 Opcjonalnie wyświetlać prognozowany koszt roczny obliczony z aktywnych subskrypcji.
+
+[ ] P0 Każda pozycja pokazuje nazwę, kwotę, częstotliwość, najbliższą datę płatności i status aktywności.
+
+[ ] P0 Przycisk dodawania otwiera formularz nowej subskrypcji.
+
+Dane subskrypcji
+
+[ ] P0 Nazwa, np. Netflix, siłownia, narzędzie AI.
+
+[ ] P0 Kwota w groszach.
+
+[ ] P0 Częstotliwość: miesięczna, kwartalna, półroczna, roczna lub własna.
+
+[ ] P0 Data rozpoczęcia.
+
+[ ] P0 Najbliższa data płatności.
+
+[ ] P0 Kategoria pomocnicza, np. rozrywka, sport, AI, chmura.
+
+[ ] P0 Status aktywna / zakończona.
+
+[ ] P0 Data ostatniego potwierdzenia korzystania.
+
+
+===== PAGE 7/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 7
+
+Automatyczne przenoszenie i pytanie kontrolne
+
+[ ] P0 Aktywna subskrypcja tworzy płatność zgodnie z harmonogramem.
+
+[ ] P0 Kwota jest kopiowana automatycznie do kolejnego okresu.
+
+[ ] P0 Nie tworzyć duplikatu płatności dla tego samego terminu.
+
+[ ] P0 Co ustalony okres, domyślnie co 3 miesiące, pokazać pytanie: „Czy nadal korzystasz z tej subskrypcji i ją opłacasz?”.
+
+[ ] P0 Opcje odpowiedzi: „Tak”, „Zakończ subskrypcję”, „Przypomnij później”.
+
+[ ] P0 Zakończenie subskrypcji nie usuwa wcześniejszych płatności z historii.
+
+AC - kryteria akceptacji
+
+[ ] Subskrypcja miesięczna pojawia się dokładnie raz w każdym właściwym miesiącu.
+
+[ ] Subskrypcja roczna zwiększa sumę tylko w miesiącu jej płatności.
+
+[ ] Zakończona subskrypcja nie generuje nowych płatności.
+
+[ ] Zmiana kwoty wpływa tylko na przyszłe płatności, a nie na zapisane historyczne rekordy.
+
+5.4. Wydatki i zakupy
+
+Podkategorie domyślne
+
+Kod / nazwa Przykładowy zakres
+
+Jedzenie zakupy spożywcze, restauracje, jedzenie na wynos
+
+Kosmetyki i higiena kosmetyki, produkty higieniczne
+
+Sprzątanie środki czystości, akcesoria do sprzątania
+
+Ubrania odzież, obuwie, dodatki
+
+Mieszkanie meble, dekoracje, wyposażenie, narzędzia
+
+Rozrywka kino, wydarzenia, gry, wyjścia
+
+Inne zakupy niesklasyfikowane
+
+Widok szczegółów kategorii
+
+[ ] P0 Wyświetlić łączną sumę zakupów z wybranego miesiąca.
+
+[ ] P0 Wyświetlić każdą podkategorię z jej dokładną miesięczną sumą.
+
+[ ] P0 Kliknięcie podkategorii otwiera listę przypisanych zakupów.
+
+[ ] P0 Udostępnić dwa główne przyciski: „Wpisz ręcznie” i „Zeskanuj paragon”.
+
+5.5. Ręczne dodawanie wydatku
+
+Pole Wymaganie
+
+Kwota wymagane, dodatnia, maksymalnie 2 miejsca po przecinku
+
+Data wymagana, domyślnie dzisiejsza
+
+Podkategoria wymagana, wybór z aktywnych kategorii
+
+Sklep / miejsce opcjonalne, krótki tekst
+
+Opis opcjonalny
+
+Sposób płatności opcjonalny: karta, gotówka, przelew, inne
+
+[ ] P0 Po zapisaniu utworzyć jeden rekord płatności ze źródłem MANUAL.
+
+[ ] P0 Po zapisaniu wrócić do listy zakupów lub pokazać krótki komunikat sukcesu.
+
+[ ] P0 Nie pozwolić zapisać pustej, zerowej ani ujemnej kwoty.
+
+[ ] P0 Przecinek i kropka mogą być akceptowane podczas wpisywania kwoty, ale zapis ma być jednolity.
+
+AC - kryteria akceptacji
+
+[ ] Nowy wydatek natychmiast pojawia się w historii i sumie podkategorii.
+
+
+===== PAGE 8/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 8
+
+[ ] Edycja kwoty aktualizuje wszystkie powiązane sumy.
+
+[ ] Anulowanie formularza nie tworzy rekordu.
+
+5.6. Skanowanie paragonu - uproszczone OCR
+
+Zakres OCR w MVP
+
+Jeden paragon jest zapisywany jako jedna transakcja. System odczytuje wyłącznie nazwę sklepu, datę i końcową kwotę.
+
+Nie odczytuje listy produktów ani ich kategorii.
+
+Przepływ użytkownika
+
+[ ] P0 1. Użytkownik wybiera „Zeskanuj paragon”.
+
+[ ] P0 2. Aplikacja prosi o dostęp do aparatu lub pozwala wybrać zdjęcie z galerii.
+
+[ ] P0 3. Użytkownik wykonuje zdjęcie.
+
+[ ] P0 4. Aplikacja uruchamia OCR i wyświetla ekran weryfikacji.
+
+[ ] P0 5. Pola sklep, data i kwota są wstępnie uzupełnione, jeżeli zostały rozpoznane.
+
+[ ] P0 6. Użytkownik wybiera podkategorię zakupu.
+
+[ ] P0 7. Aplikacja pyta: „Czy dane zostały poprawnie odczytane?”.
+
+[ ] P0 8. Użytkownik zapisuje, poprawia dane, ponawia zdjęcie lub anuluje.
+
+Reguły rozpoznawania
+
+[ ] P0 Kwoty oznaczone jako „SUMA”, „RAZEM”, „DO ZAPŁATY” lub podobne mają wyższy priorytet niż sumy częściowe.
+
+[ ] P0 Gdy znaleziono kilka możliwych kwot, wybrać najbardziej prawdopodobną, ale zawsze umożliwić zmianę.
+
+[ ] P0 Data musi być prawidłową datą kalendarzową; w razie braku pozostawić pole puste lub użyć bieżącej daty z wyraźnym
+
+oznaczeniem do sprawdzenia.
+
+[ ] P0 Nazwa sklepu jest sugestią i może pozostać pusta.
+
+[ ] P0 Zdjęcie paragonu może zostać zapisane lokalnie jako opcjonalny załącznik.
+
+[ ] P0 Nigdy nie zapisywać wyniku OCR automatycznie bez potwierdzenia użytkownika.
+
+Stany błędów
+
+[ ] P1 Brak uprawnień do aparatu - wyjaśnić problem i zaoferować otwarcie ustawień lub wybór zdjęcia.
+
+[ ] P1 Nieczytelne zdjęcie - pokazać możliwość ponowienia skanu.
+
+[ ] P1 Brak rozpoznanej kwoty - pole kwoty puste i wymagane do ręcznego uzupełnienia.
+
+[ ] P1 Błąd OCR - użytkownik nadal może przejść do formularza ręcznego z zachowanym zdjęciem.
+
+AC - kryteria akceptacji
+
+[ ] Skan nie tworzy transakcji przed naciśnięciem „Zapisz”.
+
+[ ] Każde rozpoznane pole można edytować.
+
+[ ] Po zapisaniu transakcja ma źródło RECEIPT_SCAN i jest widoczna w historii.
+
+[ ] W przypadku pustej kwoty zapis jest zablokowany do czasu jej uzupełnienia.
+
+5.7. Historia wszystkich płatności
+
+[ ] P0 Wyświetlać wszystkie zapisane rekordy z rachunków, subskrypcji i zakupów.
+
+[ ] P0 Sortować chronologicznie od najnowszych do najstarszych.
+
+[ ] P0 Grupować wizualnie według daty lub miesiąca, jeżeli poprawia czytelność.
+
+[ ] P0 Każdy wiersz pokazuje nazwę, kategorię, datę, kwotę i ikonę.
+
+[ ] P0 Rachunki z kwotą, ale statusem „Do zapłaty”, mogą być widoczne z oznaczeniem statusu.
+
+[ ] P0 Rachunki oczekujące na wpisanie kwoty nie są wyświetlane w historii płatności.
+
+[ ] P0 Kliknięcie pozycji otwiera szczegóły.
+
+AC - kryteria akceptacji
+
+[ ] Lista zachowuje prawidłową kolejność dla wielu płatności tego samego dnia.
+
+[ ] Usunięta płatność znika z historii i wszystkich sum.
+
+[ ] Po edycji historia pokazuje zmienione dane bez ponownego uruchomienia.
+
+
+===== PAGE 9/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 9
+
+5.8. Szczegóły płatności
+
+[ ] P0 Nazwa płatności lub sklepu.
+
+[ ] P0 Kwota.
+
+[ ] P0 Data płatności lub zakupu.
+
+[ ] P0 Kategoria główna i podkategoria.
+
+[ ] P0 Status - dla rachunków.
+
+[ ] P0 Termin płatności - dla rachunków.
+
+[ ] P0 Częstotliwość i źródłowa subskrypcja - dla subskrypcji.
+
+[ ] P0 Sposób dodania: ręcznie, automatycznie lub skan paragonu.
+
+[ ] P0 Opis i sposób płatności, jeżeli podane.
+
+[ ] P0 Zdjęcie paragonu, jeżeli zapisane.
+
+[ ] P0 Przyciski: Edytuj i Usuń; dodatkowo „Oznacz jako opłacony” dla rachunku.
+
+Reguły usuwania
+
+[ ] P0 Przed usunięciem zawsze pokazać potwierdzenie.
+
+[ ] P0 Usunięcie pojedynczej płatności subskrypcji nie kończy całej subskrypcji.
+
+[ ] P0 Usunięcie szablonu rachunku lub subskrypcji wymaga osobnego działania w szczegółach źródła.
+
+[ ] P0 Usunięcie rekordu aktualizuje wszystkie sumy i historię.
+
+5.9. Ekran analizy - zakres tymczasowy
+
+Decyzja projektowa
+
+Ikona Analiza ma być obecna od początku, ale szczegółowe wykresy i wskaźniki zostaną opisane w kolejnej wersji
+
+specyfikacji. Do tego czasu ekran może zawierać neutralny komunikat „Moduł analizy zostanie dodany w kolejnym etapie”.
+
+[ ] P1 Utworzyć trasę i pusty ekran Analiza.
+
+[ ] P1 Nie wdrażać wykresów bez osobnej specyfikacji.
+
+[ ] P1 Zapewnić miejsce w architekturze na filtrowanie analiz po miesiącu i kategorii.
+
+
+===== PAGE 10/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 10
+
+6. Reguły biznesowe
+
+ID Reguła
+
+BR-01 Każdy zapis finansowy należy do dokładnie jednej kategorii głównej.
+
+BR-02 Każdy zakup należy do dokładnie jednej podkategorii zakupów.
+
+BR-03 Kwoty są przechowywane jako liczba całkowita groszy.
+
+BR-04
+Kwota rachunku może być pusta wyłącznie w stanie
+
+WAITING_AMOUNT.
+
+BR-05 Pusta kwota nie jest wliczana do sum i nie trafia do historii płatności.
+
+BR-06
+Subskrypcja generuje rekordy płatności zgodnie ze swoją
+
+częstotliwością.
+
+BR-07 Zmiana szablonu cyklicznego nie nadpisuje historycznych płatności.
+
+BR-08 OCR tworzy wyłącznie propozycję danych, a nie gotową płatność.
+
+BR-09 Wszystkie sumy zależą od wybranego miesiąca i roku.
+
+BR-10
+Wartość 0,00 zł jest wyświetlana, ale nie może być zapisana jako
+
+nowy wydatek.
+
+BR-11
+Status OVERDUE jest wyliczany na podstawie terminu, statusu
+
+opłacenia i bieżącej daty.
+
+BR-12
+Aplikacja nie może tworzyć dwóch automatycznych rekordów tego
+
+samego źródła na ten sam termin.
+
+6.1. Obliczanie sum
+
+Suma Co obejmuje
+
+Rachunki domowe
+rachunki wybranego miesiąca z uzupełnioną kwotą, niezależnie od
+
+statusu opłacenia
+
+Subskrypcje
+wygenerowane płatności subskrypcji przypadające na wybrany
+
+miesiąc
+
+Wydatki i zakupy ręczne i zeskanowane zakupy z datą w wybranym miesiącu
+
+Podkategoria zakupów zakupy przypisane do danej podkategorii w wybranym miesiącu
+
+6.2. Format i walidacja danych
+
+[ ] P0 Waluta: PLN; format interfejsu pl-PL.
+
+[ ] P0 Kwota na ekranie: separator tysięcy spacją, separator dziesiętny przecinkiem.
+
+[ ] P0 Daty w interfejsie: dd.MM.yyyy lub pełna polska nazwa miesiąca.
+
+[ ] P0 Nazwa pozycji: 1-80 znaków.
+
+[ ] P0 Opis: maksymalnie 500 znaków.
+
+[ ] P0 Kwota: większa od 0 i nie większa niż 99 999 999,99 zł.
+
+[ ] P0 Każda modyfikacja zapisuje createdAt oraz updatedAt.
+
+7. Model danych
+
+Założenie modelu
+
+Wspólna tabela płatności stanowi źródło historii i sum. Rachunki oraz subskrypcje mają osobne szablony cykliczne, które
+
+generują rekordy w tabeli płatności.
+
+
+===== PAGE 11/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 11
+
+7.1. Encja Category
+
+Pole Typ logiczny Uwagi
+
+id integer / UUID lokalny klucz główny
+
+mainType enum BILL, SUBSCRIPTION, PURCHASE
+
+name text nazwa widoczna w aplikacji
+
+iconKey text klucz ikony, bez przechowywania obiektu UI
+
+isActive boolean ukrywanie bez kasowania historii
+
+sortOrder integer kolejność na ekranie
+
+7.2. Encja Payment
+
+Pole Typ logiczny Wymaganie
+
+id integer / UUID lokalny klucz główny
+
+mainType enum BILL, SUBSCRIPTION, PURCHASE
+
+categoryId FK podkategoria lub kategoria źródłowa
+
+title text np. Prąd, Netflix, Lidl
+
+amountGrosze integer nullable puste tylko dla rachunku oczekującego
+
+effectiveDate date data zakupu/płatności lub miesiąc rachunku
+
+dueDate date nullable termin rachunku
+
+paidDate date nullable data opłacenia rachunku
+
+status enum nullable
+status rachunku; dla pozostałych może być
+
+COMPLETED
+
+source enum
+MANUAL, AUTO_BILL,
+
+AUTO_SUBSCRIPTION, RECEIPT_SCAN
+
+merchant text nullable sklep lub usługodawca
+
+description text nullable opis użytkownika
+
+paymentMethod enum nullable CARD, CASH, TRANSFER, OTHER
+
+billTemplateId FK nullable źródło rachunku cyklicznego
+
+subscriptionId FK nullable źródło subskrypcji
+
+receiptImagePath text nullable lokalna ścieżka zdjęcia
+
+createdAt / updatedAt datetime audyt lokalny
+
+7.3. Encja BillTemplate
+
+Pole Opis
+
+id klucz główny
+
+name nazwa rachunku
+
+categoryId podkategoria rachunków
+
+defaultDueDay domyślny dzień terminu w miesiącu
+
+isActive czy tworzyć kolejne miesiące
+
+useFixedAmount czy kopiować stałą kwotę
+
+fixedAmountGrosze opcjonalna stała kwota
+
+createdAt / updatedAt daty techniczne
+
+
+===== PAGE 12/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 12
+
+7.4. Encja Subscription
+
+Pole Opis
+
+id klucz główny
+
+name nazwa subskrypcji
+
+amountGrosze aktualna kwota przyszłych płatności
+
+frequencyType MONTHLY, QUARTERLY, HALF_YEARLY, YEARLY, CUSTOM
+
+customIntervalMonths liczba miesięcy dla częstotliwości własnej
+
+startDate data rozpoczęcia
+
+nextPaymentDate następna data wygenerowania płatności
+
+isActive status aktywności
+
+lastUsageConfirmationDate ostatnie potwierdzenie korzystania
+
+confirmationIntervalMonths domyślnie 3
+
+createdAt / updatedAt daty techniczne
+
+7.5. Indeksy i ograniczenia
+
+[ ] P0 Unikalność Payment(billTemplateId, miesiąc, rok) dla rekordów AUTO_BILL.
+
+[ ] P0 Unikalność Payment(subscriptionId, effectiveDate) dla rekordów AUTO_SUBSCRIPTION.
+
+[ ] P0 Indeks Payment(effectiveDate) do historii i sum miesięcznych.
+
+[ ] P0 Indeks Payment(mainType, effectiveDate) do kart ekranu głównego.
+
+[ ] P0 Usunięcie kategorii z historią powinno oznaczać isActive=false, nie fizyczne kasowanie.
+
+8. Założenia techniczne
+
+Obszar Decyzja dla MVP
+
+Frontend Flutter / Dart
+
+Platforma Android; kod możliwie zgodny także z iOS
+
+Baza lokalna relacyjna baza SQLite
+
+Architektura warstwy: prezentacja, logika aplikacji, dane
+
+Stan aplikacji
+jeden spójny mechanizm zarządzania stanem; bez logiki SQL w
+
+widokach
+
+OCR lokalna lub urządzeniowa usługa OCR opakowana interfejsem
+
+Zdjęcia lokalny katalog aplikacji; baza przechowuje wyłącznie ścieżkę
+
+Sieć brak wymogu połączenia z internetem
+
+Język UI polski
+
+Motyw jasny, prosty; ciemny motyw może zostać dodany później
+
+8.1. Struktura warstw
+
+[ ] P0 Presentation: ekrany, widżety, formularze i nawigacja.
+
+[ ] P0 Application: przypadki użycia, np. AddManualPurchase, GenerateMonthlyBills, ConfirmSubscription.
+
+[ ] P0 Domain: modele, enumy, walidacja i reguły biznesowe.
+
+[ ] P0 Data: baza SQLite, repozytoria, migracje, pliki zdjęć i adapter OCR.
+
+
+===== PAGE 13/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 13
+
+8.2. Wymagania niefunkcjonalne
+
+[ ] P1 Aplikacja uruchamia się bez połączenia z internetem.
+
+[ ] P1 Dane użytkownika nie opuszczają urządzenia w MVP.
+
+[ ] P1 Typowe przejście między ekranami i przeliczenie sum powinno być odczuwalnie natychmiastowe.
+
+[ ] P1 Formularze zachowują wpisane dane, gdy otworzy się selektor daty lub kategorii.
+
+[ ] P1 Aplikacja obsługuje zmianę orientacji bez utraty danych formularza, jeżeli orientacja nie jest zablokowana.
+
+[ ] P1 Błędy bazy i OCR są przechwytywane i prezentowane w zrozumiałym komunikacie.
+
+[ ] P1 Kod powinien umożliwiać późniejsze zastąpienie lokalnego repozytorium repozytorium chmurowym.
+
+
+===== PAGE 14/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 14
+
+9. Plan wdrożenia - lista TO DO
+
+Kolejność obowiązkowa
+
+Każdy etap kończy się działającą wersją aplikacji. Agent nie powinien rozpoczynać kolejnego etapu, dopóki kryteria
+
+akceptacji bieżącego etapu nie są spełnione.
+
+Etap 0 - szkielet projektu
+
+[ ] P0 Utworzyć projekt Flutter i podstawową strukturę katalogów.
+
+[ ] P0 Skonfigurować analizę statyczną i formatowanie kodu.
+
+[ ] P0 Dodać motyw, formatowanie pl-PL i stałe tekstowe interfejsu.
+
+[ ] P0 Utworzyć nawigację do ekranów Home, Historia i Analiza.
+
+[ ] P0 Dodać tymczasowe puste widoki wszystkich głównych tras.
+
+Etap 1 - model danych i baza
+
+[ ] P0 Zaimplementować modele Category, Payment, BillTemplate i Subscription.
+
+[ ] P0 Utworzyć enumy statusów, źródeł i częstotliwości.
+
+[ ] P0 Utworzyć bazę SQLite, tabele, indeksy i pierwszą migrację.
+
+[ ] P0 Dodać repozytoria i operacje CRUD.
+
+[ ] P0 Dodać domyślne kategorie przy pierwszym uruchomieniu.
+
+[ ] P0 Napisać testy konwersji kwot oraz zapisu/odczytu bazy.
+
+Etap 2 - ekran główny
+
+[ ] P0 Zaimplementować wybór miesiąca i roku.
+
+[ ] P0 Zaimplementować trzy karty kategorii z sumami.
+
+[ ] P0 Podłączyć karty do zapytań agregujących z bazy.
+
+[ ] P0 Dodać przejścia do szczegółów kategorii.
+
+[ ] P0 Sprawdzić aktualizację sum po zmianie danych.
+
+Etap 3 - rachunki
+
+[ ] P0 Zaimplementować listę rachunków dla wybranego miesiąca.
+
+[ ] P0 Zaimplementować formularz szablonu rachunku.
+
+[ ] P0 Zaimplementować automatyczne tworzenie miesięcznych rekordów.
+
+[ ] P0 Zaimplementować edycję kwoty, terminu i statusu.
+
+[ ] P0 Zaimplementować automatyczny status „Po terminie”.
+
+[ ] P1 Dodać historię wcześniejszych kwot rachunku.
+
+Etap 4 - subskrypcje
+
+[ ] P0 Zaimplementować listę i formularz subskrypcji.
+
+[ ] P0 Zaimplementować generator płatności cyklicznych.
+
+[ ] P0 Zaimplementować zakończenie subskrypcji bez usuwania historii.
+
+[ ] P1 Zaimplementować okresowe pytanie o dalsze korzystanie.
+
+[ ] P1 Dodać prognozowany koszt roczny.
+
+Etap 5 - zakupy ręczne
+
+[ ] P0 Zaimplementować podkategorie i ich miesięczne sumy.
+
+[ ] P0 Zaimplementować formularz ręcznego wydatku.
+
+[ ] P0 Dodać walidację kwoty, daty i kategorii.
+
+[ ] P0 Dodać listę zakupów po kliknięciu podkategorii.
+
+
+===== PAGE 15/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 15
+
+Etap 6 - historia i szczegóły
+
+[ ] P0 Zaimplementować wspólną chronologiczną historię.
+
+[ ] P0 Zaimplementować ekran szczegółów zależny od typu płatności.
+
+[ ] P0 Zaimplementować edycję i usuwanie z potwierdzeniem.
+
+[ ] P0 Sprawdzić aktualizację wszystkich sum po zmianach.
+
+Etap 7 - skanowanie paragonu
+
+[ ] P1 Dodać obsługę aparatu i wyboru zdjęcia z galerii.
+
+[ ] P1 Utworzyć interfejs ReceiptOcrService.
+
+[ ] P1 Zaimplementować ekstrakcję sklepu, daty i kwoty.
+
+[ ] P1 Zaimplementować ekran weryfikacji i ręcznej korekty.
+
+[ ] P1 Dodać opcjonalne lokalne przechowywanie zdjęcia.
+
+[ ] P1 Obsłużyć brak uprawnień i nieczytelny skan.
+
+Etap 8 - analiza jako placeholder
+
+[ ] P1 Dodać ekran z informacją o przyszłym module.
+
+[ ] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji.
+
+Etap 9 - jakość i wydanie lokalne
+
+[ ] P0 Wykonać pełny test scenariuszy z rozdziału 10.
+
+[ ] P0 Sprawdzić migrację bazy na danych istniejących.
+
+[ ] P0 Sprawdzić aplikację bez internetu.
+
+[ ] P0 Sprawdzić odrzucenie uprawnień aparatu.
+
+[ ] P0 Usunąć dane demonstracyjne lub oznaczyć je jako opcjonalne.
+
+[ ] P0 Zbudować instalacyjny plik APK do testów prywatnych.
+
+10. Scenariusze testowe
+
+ID Scenariusz Oczekiwany wynik
+
+T-01 Pierwsze uruchomienie
+Domyślne kategorie istnieją, sumy
+
+wynoszą 0,00 zł.
+
+T-02 Dodanie zakupu 125,50 zł w Jedzenie
+Karta zakupów i podkategoria zwiększają
+
+się o 125,50 zł; pozycja trafia do historii.
+
+T-03 Edycja zakupu z 125,50 zł na 100,00 zł Sumy zmniejszają się o 25,50 zł.
+
+T-04 Usunięcie zakupu
+Pozycja znika z historii i przestaje
+
+wpływać na sumy.
+
+T-05
+Nowy miesiąc z aktywnym rachunkiem
+
+Prąd
+
+Powstaje jedna pozycja „Oczekuje na
+
+kwotę”.
+
+T-06 Wpisanie kwoty rachunku 180,40 zł
+Rachunek trafia do sumy i historii ze
+
+statusem „Do zapłaty”.
+
+T-07 Oznaczenie rachunku jako opłacony Status i data opłacenia są zapisane.
+
+T-08 Nieopłacony rachunek po terminie Status zmienia się na „Po terminie”.
+
+T-09 Subskrypcja miesięczna 43,00 zł
+Każdego miesiąca powstaje dokładnie
+
+jedna płatność 43,00 zł.
+
+T-10 Subskrypcja roczna
+Płatność pojawia się tylko w miesiącu
+
+terminu.
+
+
+===== PAGE 16/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 16
+
+ID Scenariusz Oczekiwany wynik
+
+T-11 Zakończenie subskrypcji
+Nie powstają przyszłe płatności; historia
+
+pozostaje.
+
+T-12 Skan z poprawnymi danymi
+Dane są pokazane do weryfikacji; zapis
+
+następuje dopiero po potwierdzeniu.
+
+T-13 Skan bez rozpoznanej kwoty Kwota jest pusta i zapis jest zablokowany.
+
+T-14 Brak zgody na aparat
+Aplikacja nie ulega awarii i pokazuje
+
+poprawny komunikat.
+
+T-15 Przełączenie miesiąca
+Sumy i listy odpowiadają wybranemu
+
+miesiącowi.
+
+T-16 Ponowne uruchomienie aplikacji Wszystkie dane pozostają zapisane.
+
+11. Definition of Done - gotowość MVP
+
+[ ] P0 Aplikacja instaluje się i uruchamia na fizycznym telefonie z Androidem.
+
+[ ] P0 Działa bez internetu.
+
+[ ] P0 Dane pozostają po zamknięciu i ponownym uruchomieniu.
+
+[ ] P0 Użytkownik może dodać, edytować i usunąć ręczny zakup.
+
+[ ] P0 Użytkownik może uzupełnić i opłacić rachunek.
+
+[ ] P0 Rachunki tworzą się automatycznie w kolejnych miesiącach bez duplikatów.
+
+[ ] P0 Subskrypcje generują płatności zgodnie z częstotliwością bez duplikatów.
+
+[ ] P0 Użytkownik może zakończyć subskrypcję bez utraty historii.
+
+[ ] P0 Paragon może zostać zeskanowany, poprawiony i zatwierdzony.
+
+[ ] P0 Historia zawiera wszystkie zapisane płatności w prawidłowej kolejności.
+
+[ ] P0 Karty ekranu głównego pokazują prawidłowe miesięczne sumy.
+
+[ ] P0 Wszystkie scenariusze P0 z rozdziału 10 przechodzą pomyślnie.
+
+[ ] P0 Kod przechodzi analizę statyczną i kompilację bez błędów.
+
+[ ] P0 Brak krytycznych awarii podczas normalnego użycia.
+
+12. Rozwój po MVP
+
+Priorytet późniejszy Możliwa funkcja
+
+Następna specyfikacja pełny ekran analizy, wykresy, porównania miesięcy i komunikaty
+
+Później budżety i limity dla kategorii
+
+Później eksport CSV / Excel / PDF
+
+Później kopie zapasowe i import danych
+
+Później PIN lub biometria
+
+Później rozpoznawanie produktów z paragonu
+
+Później automatyczna kategoryzacja zakupów
+
+Wersja publiczna
+konta użytkowników, synchronizacja, wspólne gospodarstwa
+
+domowe
+
+Wersja publiczna polityka prywatności, zgody, analityka i publikacja w sklepach
+
+12.1. Otwarte decyzje do kolejnej wersji dokumentu
+
+[ ] P2 Dokładny wygląd ekranu analizy i rodzaje wykresów.
+
+
+===== PAGE 17/17 =====
+SPECYFIKACJA MVP | APLIKACJA WYDATKÓW DOMOWYCH
+
+Wersja 0.1 | 28.07.2026 | Strona 17
+
+[ ] P2 Czy rachunki mają mieć powiadomienia przed terminem.
+
+[ ] P2 Czy automatyczna płatność subskrypcji ma być od razu uznawana za opłaconą.
+
+[ ] P2 Czy zdjęcia paragonów mają być zachowywane domyślnie czy tylko opcjonalnie.
+
+[ ] P2 Czy użytkownik może tworzyć własne główne kategorie, czy tylko podkategorie.
+
+[ ] P2 Zakres eksportu i kopii zapasowych.
+
+13. Skrócona instrukcja startowa dla agenta AI
+
+Polecenie wykonawcze
+
+Zbuduj aplikację zgodnie z etapami 0-9. Zacznij od Etapu 0 i nie przechodź dalej, dopóki aplikacja się nie kompiluje oraz
+
+nie spełnia kryteriów danego etapu. Użyj Fluttera, Darta i lokalnej bazy SQLite. Nie dodawaj logowania, chmury ani
+
+zaawansowanej analizy produktów z paragonu. Wszystkie teksty interfejsu mają być po polsku, a kwoty w PLN w formacie
+
+pl-PL.
+
+Pierwsza odpowiedź agenta powinna zawierać:
+
+[ ] P0 proponowaną strukturę katalogów projektu;
+
+[ ] P0 listę modeli i enumów;
+
+[ ] P0 wybraną architekturę zarządzania stanem i uzasadnienie w 2-3 zdaniach;
+
+[ ] P0 plan realizacji Etapu 0;
+
+[ ] P0 kod niezbędny do uruchomienia szkieletu aplikacji;
+
+[ ] P0 instrukcję uruchomienia i sposób sprawdzenia, że etap działa.
+
+Koniec specyfikacji
+
+Wersja 0.1 obejmuje uzgodnioną wizję aplikacji i funkcje do momentu rozpoczęcia szczegółowego projektowania modułu analizy wydatków.
