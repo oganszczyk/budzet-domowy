@@ -140,6 +140,23 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       .sort((a, b) => this.compareNewestFirst(a, b));
   }
 
+  /** 5.4: zakupy przypisane do jednej podkategorii w wybranym miesiącu. */
+  async listPaymentsForCategory(
+    month: YearMonth,
+    categoryId: number,
+    mainType?: MainType
+  ): Promise<Payment[]> {
+    return this.paymentsInMonth(month)
+      .filter(
+        (p) => p.categoryId === categoryId && (mainType === undefined || p.mainType === mainType)
+      )
+      .sort((a, b) => this.compareNewestFirst(a, b));
+  }
+
+  async getCategory(id: number): Promise<Category | null> {
+    return this.categories.find((c) => c.id === id) ?? null;
+  }
+
   /**
    * 5.7: wspólna historia wszystkich zapisanych płatności,
    * chronologicznie od najnowszych do najstarszych.

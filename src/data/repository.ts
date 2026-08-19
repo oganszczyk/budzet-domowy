@@ -69,6 +69,15 @@ export interface ExpensesRepository {
   /** Płatności z wybranego miesiąca, opcjonalnie jednego typu. */
   listPaymentsForMonth(month: YearMonth, mainType?: MainType): Promise<Payment[]>;
 
+  /** 5.4: „Kliknięcie podkategorii otwiera listę przypisanych zakupów." */
+  listPaymentsForCategory(
+    month: YearMonth,
+    categoryId: number,
+    mainType?: MainType
+  ): Promise<Payment[]>;
+
+  getCategory(id: number): Promise<Category | null>;
+
   /**
    * 5.7: wspólna historia, od najnowszych do najstarszych.
    * BR-05: rachunki oczekujące na kwotę NIE są tu pokazywane.

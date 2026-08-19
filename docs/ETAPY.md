@@ -104,7 +104,27 @@ Sprawdzone w działającej aplikacji:
 | T-10: subskrypcja roczna              | dodaje 89,00 zł do prognozy, a nie 1 068,00 zł                   |
 | AC 5.3: zmiana kwoty                  | nowa cena w przyszłych miesiącach, zapisane płatności nietknięte |
 
-## Etap 5 — zakupy ręczne ⬜
+## Etap 5 — zakupy ręczne ✅ ZAKOŃCZONY
+
+- [x] Zaimplementować podkategorie i ich miesięczne sumy
+- [x] Zaimplementować formularz ręcznego wydatku
+- [x] Dodać walidację kwoty, daty i kategorii
+- [x] Dodać listę zakupów po kliknięciu podkategorii
+
+Powstał też wspólny ekran szczegółów płatności (5.8) pod `/payment/[id]`,
+obsługujący wszystkie trzy typy. Etap 6 może go użyć bez powielania kodu —
+zostaje mu wtedy sama wspólna historia.
+
+Sprawdzone w działającej aplikacji:
+
+| Sprawdzenie                        | Wynik                                                    |
+| ---------------------------------- | -------------------------------------------------------- |
+| Sumy podkategorii                  | Jedzenie 125,50 + 87,30 = 212,80 zł                      |
+| BR-10: pusta i zerowa kwota        | zapis zablokowany, komunikat widoczny                    |
+| T-02: dodanie 125,50 zł w Jedzeniu | suma 569,99 → 695,49 zł, podkategoria 212,80 → 338,30 zł |
+| T-03: edycja 125,50 → 100,00 zł    | podkategoria 338,30 → 312,80 zł (spadek o 25,50 zł)      |
+| T-04: usunięcie zakupu             | podkategoria wraca do 212,80 zł, pozycja znika           |
+| 5.7: kolejność listy               | od najnowszych: 19.08, 09.08, 03.08                      |
 
 ## Etap 6 — historia i szczegóły ⬜
 
