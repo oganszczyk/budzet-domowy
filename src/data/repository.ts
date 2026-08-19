@@ -31,6 +31,12 @@ export type NewBillTemplate = Omit<BillTemplate, 'id' | 'createdAt' | 'updatedAt
 /** Pola, które wolno zmienić w szablonie rachunku. */
 export type BillTemplatePatch = Partial<NewBillTemplate>;
 
+/** Dane potrzebne do utworzenia subskrypcji (7.4). */
+export type NewSubscription = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** Pola, które wolno zmienić w subskrypcji. */
+export type SubscriptionPatch = Partial<NewSubscription>;
+
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
   category: Category;
@@ -108,5 +114,17 @@ export interface ExpensesRepository {
 
   // --- Subskrypcje (7.4) ---
 
+  /** Domyślnie wszystkie; lista pokazuje też zakończone, żeby dało się je znaleźć. */
   listSubscriptions(): Promise<Subscription[]>;
+  getSubscription(id: number): Promise<Subscription | null>;
+  createSubscription(input: NewSubscription): Promise<Subscription>;
+  updateSubscription(id: number, patch: SubscriptionPatch): Promise<Subscription>;
+
+  /**
+   * Rejestr wygenerowanych płatności subskrypcji — ta sama zasada co przy
+   * rachunkach: pytamy „czy już to tworzyłem?", a nie „czy to istnieje?",
+   * żeby usunięta płatność nie wracała przy następnym otwarciu listy.
+   */
+  hasGeneratedSubscriptionPayment(subscriptionId: number, month: YearMonth): Promise<boolean>;
+  markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void>;
 }

@@ -23,7 +23,9 @@ import type {
   ExpensesRepository,
   NewBillTemplate,
   NewPayment,
+  NewSubscription,
   PaymentPatch,
+  SubscriptionPatch,
 } from './repository';
 
 export class InMemoryExpensesRepository implements ExpensesRepository {
@@ -39,6 +41,9 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
    * `hasGeneratedBill` w interfejsie repozytorium.
    */
   private generatedBills = new Set<string>();
+  /** To samo dla subskrypcji (5.3: „nie tworzyć duplikatu płatności"). */
+  private generatedSubscriptionPayments = new Set<string>();
+  private nextSubscriptionId = 1;
 
   constructor() {
     this.reset();
@@ -62,17 +67,25 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       ...template,
       id: this.nextBillTemplateId++,
     }));
-    this.subscriptions = demo.subscriptions.map((subscription, index) => ({
+    this.nextSubscriptionId = 1;
+    this.subscriptions = demo.subscriptions.map((subscription) => ({
       ...subscription,
-      id: index + 1,
+      id: this.nextSubscriptionId++,
     }));
 
-    // Rachunki z danych demonstracyjnych już „istnieją", więc od razu
-    // trafiają do rejestru — inaczej automat próbowałby utworzyć je drugi raz.
+    // Rekordy z danych demonstracyjnych już „istnieją", więc od razu trafiają
+    // do rejestrów — inaczej automat próbowałby utworzyć je drugi raz.
     this.generatedBills = new Set(
       this.payments
         .filter((p) => p.billTemplateId !== null)
         .map((p) => this.generationKey(p.billTemplateId as number, yearMonthOf(p.effectiveDate)))
+    );
+    this.generatedSubscriptionPayments = new Set(
+      this.payments
+        .filter((p) => p.subscriptionId !== null)
+        .map((p) =>
+          this.subscriptionGenerationKey(p.subscriptionId as number, yearMonthOf(p.effectiveDate))
+        )
     );
   }
 
@@ -264,6 +277,52 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   async listSubscriptions(): Promise<Subscription[]> {
     return [...this.subscriptions];
+  }
+
+  async getSubscription(id: number): Promise<Subscription | null> {
+    return this.subscriptions.find((s) => s.id === id) ?? null;
+  }
+
+  async createSubscription(input: NewSubscription): Promise<Subscription> {
+    const now = new Date().toISOString();
+    const subscription: Subscription = {
+      ...input,
+      id: this.nextSubscriptionId++,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.subscriptions.push(subscription);
+    return subscription;
+  }
+
+  async updateSubscription(id: number, patch: SubscriptionPatch): Promise<Subscription> {
+    const index = this.subscriptions.findIndex((s) => s.id === id);
+    if (index === -1) throw new Error(`Nie znaleziono subskrypcji o id ${id}.`);
+
+    const updated: Subscription = {
+      ...this.subscriptions[index],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    this.subscriptions[index] = updated;
+    return updated;
+  }
+
+  private subscriptionGenerationKey(subscriptionId: number, month: YearMonth): string {
+    return `${subscriptionId}:${month.year}-${month.month}`;
+  }
+
+  async hasGeneratedSubscriptionPayment(
+    subscriptionId: number,
+    month: YearMonth
+  ): Promise<boolean> {
+    return this.generatedSubscriptionPayments.has(
+      this.subscriptionGenerationKey(subscriptionId, month)
+    );
+  }
+
+  async markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void> {
+    this.generatedSubscriptionPayments.add(this.subscriptionGenerationKey(subscriptionId, month));
   }
 
   // --- Pomocnicze ---

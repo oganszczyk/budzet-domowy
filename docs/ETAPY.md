@@ -82,7 +82,27 @@ brakowało możliwości zmiany terminu płatności.
 | Nie dało się zmienić terminu    | Etap 3 wymagał edycji terminu; ekran pokazywał go tylko do odczytu                                         | Edytowalny dzień terminu z walidacją długości miesiąca                         |
 | Brak kontroli nad cyklicznością | 5.8 wymaga osobnego działania dla źródła cyklicznego; nie było takiego ekranu                              | Ekran „Rachunki cykliczne" — włączanie i wyłączanie (7.5, bez utraty historii) |
 
-## Etap 4 — subskrypcje ⬜
+## Etap 4 — subskrypcje ✅ ZAKOŃCZONY
+
+- [x] Zaimplementować listę i formularz subskrypcji
+- [x] Zaimplementować generator płatności cyklicznych
+- [x] Zaimplementować zakończenie subskrypcji bez usuwania historii
+- [x] Zaimplementować okresowe pytanie o dalsze korzystanie (P1)
+- [x] Dodać prognozowany koszt roczny (P1)
+
+Harmonogram wyliczamy z daty rozpoczęcia i częstotliwości, a nie przez
+przesuwanie zapisanego pola — tak jak status rachunku (BR-11). Wartość
+wyliczona nie może się rozjechać po nieudanym zapisie.
+
+Sprawdzone w działającej aplikacji:
+
+| Sprawdzenie                           | Wynik                                                            |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| Prognoza roczna z trzech miesięcznych | 3 024,00 zł = (43 + 129 + 80) × 12                               |
+| Pytanie kontrolne po 3 miesiącach     | pyta o Netflix, „Przypomnij później" przechodzi do Siłowni       |
+| T-11: zakończenie subskrypcji         | suma miesiąca bez zmian (252,00 zł), prognoza spada o 516,00 zł  |
+| T-10: subskrypcja roczna              | dodaje 89,00 zł do prognozy, a nie 1 068,00 zł                   |
+| AC 5.3: zmiana kwoty                  | nowa cena w przyszłych miesiącach, zapisane płatności nietknięte |
 
 ## Etap 5 — zakupy ręczne ⬜
 
