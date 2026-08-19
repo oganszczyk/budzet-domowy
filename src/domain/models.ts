@@ -13,10 +13,22 @@ import type { IsoDate } from '@/lib/date';
 
 import type { BillStatus, FrequencyType, MainType, PaymentMethod, PaymentSource } from './enums';
 
-/** 7.1: Encja Category — kategorie i podkategorie. */
+/**
+ * 7.1: Encja Category — kategorie i podkategorie.
+ *
+ * ODSTĘPSTWO OD SPECYFIKACJI: zamiast pojedynczego `mainType` trzymamy listę
+ * `usedBy`. Powód: subskrypcje i zakupy mają WSPÓLNE podkategorie, więc jedna
+ * „Rozrywka" obsługuje i Netflixa, i bilet do kina.
+ *
+ * Dzięki temu przyszły ekran analizy zsumuje wydatki na rozrywkę po jednym
+ * `categoryId`, zamiast dopasowywać do siebie nazwy z dwóch osobnych list.
+ * Gdyby każdy typ miał własne rekordy, „Rozrywka" istniałaby dwa razy pod
+ * różnymi identyfikatorami i nie dałoby się ich dodać bez porównywania tekstu.
+ */
 export type Category = {
   id: number;
-  mainType: MainType;
+  /** Które kategorie główne mogą korzystać z tej podkategorii. */
+  usedBy: MainType[];
   /** Nazwa widoczna w aplikacji, po polsku. */
   name: string;
   /** Klucz ikony — sam napis, nigdy gotowy komponent. */

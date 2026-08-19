@@ -27,17 +27,29 @@ import { addMonths, currentYearMonth, dueDateFor, type YearMonth } from '@/lib/d
  */
 const BILL_CATEGORY_NAME = 'Rachunki domowe';
 
-/** 5.3: kategorie pomocnicze subskrypcji. */
-const SUBSCRIPTION_CATEGORIES = ['Rozrywka', 'Sport', 'AI', 'Chmura', 'Inne'];
-
-/** 5.4: domyślne podkategorie zakupów. */
-const PURCHASE_CATEGORIES = [
+/**
+ * WSPÓLNE podkategorie subskrypcji (5.3) i zakupów (5.4).
+ *
+ * Specyfikacja wymienia dwie osobne listy, ale mają część wspólną
+ * („Rozrywka", „Inne"). Scalamy je w jedną, żeby przyszła analiza mogła
+ * dodać do siebie wydatki z obu źródeł po tym samym identyfikatorze —
+ * np. Netflix i bilet do kina jako łączny koszt rozrywki.
+ *
+ * Pierwsze pozycje pochodzą z listy zakupów (5.4), kolejne z subskrypcji (5.3).
+ */
+const SHARED_CATEGORIES = [
+  // 5.4 — zakupy
   'Jedzenie',
   'Kosmetyki i higiena',
   'Sprzątanie',
   'Ubrania',
   'Mieszkanie',
   'Rozrywka',
+  // 5.3 — subskrypcje
+  'Sport',
+  'AI',
+  'Chmura',
+  // wspólne
   'Inne',
 ];
 
@@ -60,11 +72,11 @@ export function buildDemoCategories(): Category[] {
   const categories: Category[] = [];
   let id = 1;
 
-  const add = (mainType: MainType, names: string[]) => {
+  const add = (usedBy: MainType[], names: string[]) => {
     names.forEach((name, index) => {
       categories.push({
         id: id++,
-        mainType,
+        usedBy,
         name,
         iconKey: ICONS[name] ?? 'pricetag-outline',
         isActive: true,
@@ -73,16 +85,17 @@ export function buildDemoCategories(): Category[] {
     });
   };
 
-  add(MainType.BILL, [BILL_CATEGORY_NAME]);
-  add(MainType.SUBSCRIPTION, SUBSCRIPTION_CATEGORIES);
-  add(MainType.PURCHASE, PURCHASE_CATEGORIES);
+  // Rachunki mają jedną kategorię i nie dzielą jej z niczym innym.
+  add([MainType.BILL], [BILL_CATEGORY_NAME]);
+  // Subskrypcje i zakupy korzystają z tej samej listy podkategorii.
+  add([MainType.SUBSCRIPTION, MainType.PURCHASE], SHARED_CATEGORIES);
 
   return categories;
 }
 
-/** Znajduje identyfikator kategorii po nazwie i typie. */
+/** Znajduje identyfikator kategorii po nazwie i typie, który z niej korzysta. */
 function categoryId(categories: Category[], mainType: MainType, name: string): number {
-  const found = categories.find((c) => c.mainType === mainType && c.name === name);
+  const found = categories.find((c) => c.usedBy.includes(mainType) && c.name === name);
   if (!found) throw new Error(`Brak kategorii demonstracyjnej: ${mainType} / ${name}`);
   return found.id;
 }

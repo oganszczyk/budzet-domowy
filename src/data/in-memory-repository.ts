@@ -93,7 +93,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   async listCategories(mainType?: MainType): Promise<Category[]> {
     return this.categories
-      .filter((c) => c.isActive && (mainType === undefined || c.mainType === mainType))
+      .filter((c) => c.isActive && (mainType === undefined || c.usedBy.includes(mainType)))
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 

@@ -18,6 +18,32 @@ describe('T-01: pierwsze uruchomienie', () => {
     expect((await r.listCategories(MainType.PURCHASE)).length).toBeGreaterThan(0);
   });
 
+  it('subskrypcje i zakupy dzielą TE SAME podkategorie', async () => {
+    const r = repo();
+    const forSubscriptions = await r.listCategories(MainType.SUBSCRIPTION);
+    const forPurchases = await r.listCategories(MainType.PURCHASE);
+
+    // Ten sam identyfikator, nie tylko ta sama nazwa — dzięki temu przyszła
+    // analiza zsumuje np. „Rozrywkę" z obu źródeł bez porównywania tekstu.
+    expect(forSubscriptions.map((c) => c.id)).toEqual(forPurchases.map((c) => c.id));
+
+    const entertainment = forSubscriptions.find((c) => c.name === 'Rozrywka');
+    expect(entertainment).toBeDefined();
+    expect(entertainment?.usedBy).toEqual([MainType.SUBSCRIPTION, MainType.PURCHASE]);
+  });
+
+  it('rachunki nie mają podkategorii — jedna kategoria na wszystkie', async () => {
+    const bills = await repo().listCategories(MainType.BILL);
+    expect(bills).toHaveLength(1);
+  });
+
+  it('kategoria rachunków nie jest współdzielona z zakupami', async () => {
+    const r = repo();
+    const bills = await r.listCategories(MainType.BILL);
+    const purchases = await r.listCategories(MainType.PURCHASE);
+    expect(purchases.map((c) => c.id)).not.toContain(bills[0].id);
+  });
+
   it('miesiąc bez żadnych danych ma sumy zerowe, a nie błąd (5.1)', async () => {
     const totals = await repo().getMonthlyTotals(addMonths(THIS_MONTH, 24));
     expect(totals).toEqual({

@@ -8,7 +8,7 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { strings } from '@/constants/strings';
 import { FrequencyType, MainType } from '@/domain/enums';
@@ -18,6 +18,7 @@ import { daysInMonth, currentYearMonth, dueDateFor, formatDate, todayIso } from 
 import { validateAmountGrosze } from '@/lib/money';
 import { AmountInput } from '@/ui/components/amount-input';
 import { Button } from '@/ui/components/button';
+import { Chip, chipRowStyle } from '@/ui/components/chip';
 import { Screen } from '@/ui/components/screen';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
 
@@ -115,27 +116,14 @@ export default function NewSubscriptionScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>{strings.subscriptions.frequencyLabel}</Text>
           <View style={styles.chips}>
-            {FREQUENCIES.map((frequency) => {
-              const selected = frequency === frequencyType;
-              return (
-                <Pressable
-                  key={frequency}
-                  onPress={() => setFrequencyType(frequency)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={strings.subscriptions.frequency[frequency]}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    selected && styles.chipSelected,
-                    pressed && styles.chipPressed,
-                  ]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {strings.subscriptions.frequency[frequency]}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {FREQUENCIES.map((frequency) => (
+              <Chip
+                key={frequency}
+                label={strings.subscriptions.frequency[frequency]}
+                selected={frequency === frequencyType}
+                onPress={() => setFrequencyType(frequency)}
+              />
+            ))}
           </View>
         </View>
 
@@ -176,27 +164,14 @@ export default function NewSubscriptionScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>{strings.subscriptions.categoryLabel}</Text>
           <View style={styles.chips}>
-            {(categories ?? []).map((category) => {
-              const selected = category.id === categoryId;
-              return (
-                <Pressable
-                  key={category.id}
-                  onPress={() => setCategoryId(category.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={category.name}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    selected && styles.chipSelected,
-                    pressed && styles.chipPressed,
-                  ]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {category.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {(categories ?? []).map((category) => (
+              <Chip
+                key={category.id}
+                label={category.name}
+                selected={category.id === categoryId}
+                onPress={() => setCategoryId(category.id)}
+              />
+            ))}
           </View>
         </View>
 
@@ -253,34 +228,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     color: colors.textMuted,
   },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  chipSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  chipPressed: {
-    opacity: 0.7,
-  },
-  chipText: {
-    fontSize: fontSize.body,
-    color: colors.text,
-  },
-  chipTextSelected: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  chips: chipRowStyle,
   error: {
     fontSize: fontSize.caption,
     color: colors.statusOverdue,
