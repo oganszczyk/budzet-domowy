@@ -4,9 +4,20 @@ Aplikacja do rejestrowania wydatków domowych. Pełna specyfikacja MVP:
 `docs/Specyfikacja_aplikacji_wydatki_domowe.pdf` (wersja tekstowa do przeszukiwania:
 `docs/specyfikacja.txt`). Postęp prac: `docs/ETAPY.md`.
 
-## Expo HAS CHANGED
+## Expo — WERSJA SDK 54
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
+
+## Dlaczego SDK 54, a nie najnowszy
+
+Expo Go z Google Play / App Store obsługuje **SDK 54** (pole `expoGoSdkVersion`
+w https://api.expo.dev/v2/versions/latest). Projekt startowo powstał na SDK 57
+i Expo Go odmawiał uruchomienia z komunikatem „Project is incompatible with this
+version of Expo Go".
+
+Trzymamy się SDK 54, dopóki testujemy na Expo Go. **Nie aktualizuj SDK** bez
+przejścia na development build (`expo-dev-client` + EAS Build) — inaczej
+aplikacja przestanie się otwierać na telefonie.
 
 ## Zasady, których nie wolno złamać
 

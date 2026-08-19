@@ -4,7 +4,7 @@ Aplikacja mobilna do rejestrowania i kontrolowania wydatków domowych:
 rachunków, subskrypcji i zakupów. Działa offline, dla jednej osoby, bez kont
 i bez chmury.
 
-Zbudowana z [Expo](https://expo.dev) SDK 57 i React Native, według
+Zbudowana z [Expo](https://expo.dev) SDK 54 i React Native, według
 `docs/Specyfikacja_aplikacji_wydatki_domowe.pdf`.
 
 ## Uruchomienie
