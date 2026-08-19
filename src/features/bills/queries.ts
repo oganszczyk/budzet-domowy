@@ -60,6 +60,31 @@ export function useBillTemplates() {
   });
 }
 
+/** Wszystkie szablony, także wyłączone — ekran zarządzania (7.5). */
+export function useAllBillTemplates() {
+  return useQuery({
+    queryKey: [...queryKeys.billTemplates(), 'all'] as const,
+    queryFn: () => getRepository().listBillTemplates(true),
+  });
+}
+
+/**
+ * Włącza lub wyłącza rachunek cykliczny.
+ *
+ * 7.5 / BR-07: wyłączenie NIE kasuje szablonu ani zapisanych płatności —
+ * historia poprzednich miesięcy zostaje nietknięta, przestają tylko
+ * powstawać nowe rekordy.
+ */
+export function useSetBillTemplateActive() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+      getRepository().updateBillTemplate(id, { isActive }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.all }),
+  });
+}
+
 /** 5.2: „Przycisk dodawania pozwala utworzyć nowy typ rachunku cyklicznego." */
 export function useCreateBillTemplate() {
   const queryClient = useQueryClient();

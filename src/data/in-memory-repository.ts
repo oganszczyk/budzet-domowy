@@ -33,6 +33,12 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   private subscriptions: Subscription[] = [];
   private nextPaymentId = 1;
   private nextBillTemplateId = 1;
+  /**
+   * Rejestr „ten szablon miał już rekord w tym miesiącu".
+   * Klucz: `${idSzablonu}:${rok}-${miesiąc}`. Patrz komentarz przy
+   * `hasGeneratedBill` w interfejsie repozytorium.
+   */
+  private generatedBills = new Set<string>();
 
   constructor() {
     this.reset();
@@ -60,6 +66,14 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       ...subscription,
       id: index + 1,
     }));
+
+    // Rachunki z danych demonstracyjnych już „istnieją", więc od razu
+    // trafiają do rejestru — inaczej automat próbowałby utworzyć je drugi raz.
+    this.generatedBills = new Set(
+      this.payments
+        .filter((p) => p.billTemplateId !== null)
+        .map((p) => this.generationKey(p.billTemplateId as number, yearMonthOf(p.effectiveDate)))
+    );
   }
 
   // --- Kategorie ---
@@ -163,8 +177,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   // --- Szablony rachunków (7.3) ---
 
-  async listBillTemplates(): Promise<BillTemplate[]> {
-    return this.billTemplates.filter((t) => t.isActive);
+  async listBillTemplates(includeInactive = false): Promise<BillTemplate[]> {
+    return this.billTemplates.filter((t) => includeInactive || t.isActive);
   }
 
   async getBillTemplate(id: number): Promise<BillTemplate | null> {
@@ -216,6 +230,19 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
         p.billTemplateId === billTemplateId && p.effectiveDate >= start && p.effectiveDate <= end
     );
     return found ? this.withComputedStatus(found) : null;
+  }
+
+  /** Klucz rejestru wygenerowanych rachunków. */
+  private generationKey(billTemplateId: number, month: YearMonth): string {
+    return `${billTemplateId}:${month.year}-${month.month}`;
+  }
+
+  async hasGeneratedBill(billTemplateId: number, month: YearMonth): Promise<boolean> {
+    return this.generatedBills.has(this.generationKey(billTemplateId, month));
+  }
+
+  async markBillGenerated(billTemplateId: number, month: YearMonth): Promise<void> {
+    this.generatedBills.add(this.generationKey(billTemplateId, month));
   }
 
   /**

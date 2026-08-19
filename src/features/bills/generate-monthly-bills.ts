@@ -48,9 +48,24 @@ export async function generateMonthlyBills(
       continue;
     }
 
-    // BR-12: jeden rekord na szablon i miesiąc, nigdy dwa.
+    /**
+     * Czy ten szablon miał już swój rekord w tym miesiącu?
+     *
+     * Pytamy REJESTRU, a nie „czy taka płatność istnieje". Gdybyśmy pytali
+     * o istnienie, usunięcie rachunku przez użytkownika wyglądałoby jak brak
+     * i automat odtworzyłby go przy następnym otwarciu listy — rachunku
+     * nie dałoby się usunąć. 5.8 mówi wprost, że usunięcie pojedynczej
+     * płatności to co innego niż zakończenie źródła cyklicznego.
+     */
+    if (await repository.hasGeneratedBill(template.id, month)) continue;
+
+    // Dodatkowe zabezpieczenie BR-12 na wypadek danych sprzed wprowadzenia
+    // rejestru: jeśli rekord jednak istnieje, tylko go odnotowujemy.
     const existing = await repository.findBillForTemplateAndMonth(template.id, month);
-    if (existing !== null) continue;
+    if (existing !== null) {
+      await repository.markBillGenerated(template.id, month);
+      continue;
+    }
 
     const payment = await repository.createPayment({
       mainType: 'BILL',
@@ -76,6 +91,7 @@ export async function generateMonthlyBills(
       receiptImagePath: null,
     });
 
+    await repository.markBillGenerated(template.id, month);
     created.push(payment);
   }
 

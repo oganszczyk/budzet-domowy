@@ -71,6 +71,14 @@ export default function BillsScreen() {
           variant="secondary"
           onPress={() => router.push('/bills/new')}
         />
+        {/* 5.8: zakończenie rachunku cyklicznego to osobne działanie
+            niż usunięcie pojedynczej płatności — stąd osobny ekran. */}
+        <Button
+          label={strings.bills.manageTemplates}
+          icon="repeat-outline"
+          variant="secondary"
+          onPress={() => router.push('/bills/templates')}
+        />
       </View>
     </Screen>
   );
@@ -175,5 +183,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: spacing.xl,
+    gap: spacing.sm,
   },
 });

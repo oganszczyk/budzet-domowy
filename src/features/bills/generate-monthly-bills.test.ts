@@ -108,6 +108,41 @@ describe('generateMonthlyBills (5.2, BR-12)', () => {
     expect(created).toHaveLength(0);
   });
 
+  it('usunięty rachunek NIE wraca po ponownym otwarciu listy (5.8)', async () => {
+    const r = repo();
+    await generateMonthlyBills(r, NEXT_MONTH);
+
+    const bills = await r.listPaymentsForMonth(NEXT_MONTH, MainType.BILL);
+    const victim = bills[0];
+    await r.deletePayment(victim.id);
+
+    // Każde wejście na listę uruchamia generator — tu udajemy trzy wejścia.
+    await generateMonthlyBills(r, NEXT_MONTH);
+    await generateMonthlyBills(r, NEXT_MONTH);
+    await generateMonthlyBills(r, NEXT_MONTH);
+
+    const after = await r.listPaymentsForMonth(NEXT_MONTH, MainType.BILL);
+    expect(after.map((b) => b.id)).not.toContain(victim.id);
+    expect(after.map((b) => b.billTemplateId)).not.toContain(victim.billTemplateId);
+    expect(after).toHaveLength(bills.length - 1);
+  });
+
+  it('usunięcie rachunku w jednym miesiącu nie blokuje kolejnego miesiąca (5.8)', async () => {
+    const r = repo();
+    const monthAfterNext = addMonths(NEXT_MONTH, 1);
+
+    await generateMonthlyBills(r, NEXT_MONTH);
+    const bills = await r.listPaymentsForMonth(NEXT_MONTH, MainType.BILL);
+    const victim = bills[0];
+    await r.deletePayment(victim.id);
+
+    // Usunięcie dotyczy jednego miesiąca — źródło cykliczne działa dalej.
+    await generateMonthlyBills(r, monthAfterNext);
+
+    const later = await r.listPaymentsForMonth(monthAfterNext, MainType.BILL);
+    expect(later.map((b) => b.billTemplateId)).toContain(victim.billTemplateId);
+  });
+
   it('wyłączony szablon nie generuje kolejnych rachunków (7.5)', async () => {
     const r = repo();
     const templates = await r.listBillTemplates();

@@ -71,6 +71,17 @@ Sprawdzone w działającej aplikacji:
 | 6.1: opłacony rachunek nadal wlicza się do sumy | suma bez zmian po opłaceniu                          |
 | Nowy szablon rachunku                           | „Śmieci" dodane, stan Oczekuje na kwotę              |
 
+## Poprawki po testach na telefonie (19.08.2026)
+
+Zgłoszenie właściciela projektu: część rachunków wracała po usunięciu,
+brakowało możliwości zmiany terminu płatności.
+
+| Problem                         | Przyczyna                                                                                                  | Poprawka                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Usunięty rachunek wracał        | Automat pytał „czy taki rachunek istnieje?", więc usunięcie wyglądało jak brak i rekord powstawał ponownie | Rejestr wygenerowanych rachunków — automat pyta „czy już go kiedyś tworzyłem?" |
+| Nie dało się zmienić terminu    | Etap 3 wymagał edycji terminu; ekran pokazywał go tylko do odczytu                                         | Edytowalny dzień terminu z walidacją długości miesiąca                         |
+| Brak kontroli nad cyklicznością | 5.8 wymaga osobnego działania dla źródła cyklicznego; nie było takiego ekranu                              | Ekran „Rachunki cykliczne" — włączanie i wyłączanie (7.5, bez utraty historii) |
+
 ## Etap 4 — subskrypcje ⬜
 
 ## Etap 5 — zakupy ręczne ⬜

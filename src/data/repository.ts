@@ -76,7 +76,8 @@ export interface ExpensesRepository {
 
   // --- Szablony rachunków (7.3) ---
 
-  listBillTemplates(): Promise<BillTemplate[]>;
+  /** Domyślnie tylko aktywne. `includeInactive` zwraca też wyłączone (ekran zarządzania). */
+  listBillTemplates(includeInactive?: boolean): Promise<BillTemplate[]>;
   getBillTemplate(id: number): Promise<BillTemplate | null>;
   createBillTemplate(input: NewBillTemplate): Promise<BillTemplate>;
   updateBillTemplate(id: number, patch: BillTemplatePatch): Promise<BillTemplate>;
@@ -88,6 +89,19 @@ export interface ExpensesRepository {
    * Używane przy automatycznym tworzeniu, żeby nie powstał duplikat.
    */
   findBillForTemplateAndMonth(billTemplateId: number, month: YearMonth): Promise<Payment | null>;
+
+  /**
+   * Rejestr wygenerowanych rachunków.
+   *
+   * Automat NIE może pytać „czy taki rachunek istnieje?", bo wtedy usunięcie
+   * rachunku przez użytkownika wyglądałoby jak „brakuje go" i automat
+   * odtworzyłby go przy następnym otwarciu listy. Rachunek byłby nie do usunięcia.
+   *
+   * Dlatego zapamiętujemy sam fakt wygenerowania. Usunięcie płatności nie
+   * kasuje wpisu w rejestrze, więc decyzja użytkownika zostaje uszanowana.
+   */
+  hasGeneratedBill(billTemplateId: number, month: YearMonth): Promise<boolean>;
+  markBillGenerated(billTemplateId: number, month: YearMonth): Promise<void>;
 
   /** 5.2: historia wcześniejszych kwot dla tego samego szablonu. */
   listBillAmountHistory(billTemplateId: number): Promise<BillAmountHistoryEntry[]>;

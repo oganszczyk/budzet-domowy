@@ -25,7 +25,7 @@ import {
   useMarkBillAsUnpaid,
   useUpdatePayment,
 } from '@/features/expenses/mutations';
-import { formatDate, formatMonthYear, yearMonthOf } from '@/lib/date';
+import { daysInMonth, dueDateFor, formatDate, formatMonthYear, yearMonthOf } from '@/lib/date';
 import { formatGrosze, validateAmountGrosze } from '@/lib/money';
 import { AmountInput } from '@/ui/components/amount-input';
 import { Button } from '@/ui/components/button';
@@ -56,6 +56,7 @@ export default function BillDetailScreen() {
   const [draftAmount, setDraftAmount] = useState<number | null | undefined>(undefined);
   const [amountText, setAmountText] = useState('');
   const [draftDescription, setDraftDescription] = useState<string | undefined>(undefined);
+  const [draftDueDay, setDraftDueDay] = useState<string | undefined>(undefined);
 
   if (isLoading) {
     return <Screen centered scrollable={false} />;
@@ -78,11 +79,22 @@ export default function BillDetailScreen() {
    */
   const previousAmounts = (history ?? []).filter((entry) => entry.paymentId !== bill.id);
 
+  /**
+   * Termin edytujemy jako dzień miesiąca. Miesiąc rachunku jest ustalony,
+   * więc wystarczy dzień, a `daysInMonth` pilnuje, żeby nie dało się
+   * ustawić 31 lutego.
+   */
+  const currentDueDay = bill.dueDate ? Number(bill.dueDate.slice(-2)) : 1;
+  const dueDayText = draftDueDay ?? String(currentDueDay);
+  const dueDay = Number(dueDayText);
+  const dueDayValid = Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= daysInMonth(month);
+
   const amountToSave = draftAmount === undefined ? bill.amountGrosze : draftAmount;
   const hasAmountEdit = draftAmount !== undefined && draftAmount !== bill.amountGrosze;
   const hasDescriptionEdit =
     draftDescription !== undefined && draftDescription !== (bill.description ?? '');
-  const hasChanges = hasAmountEdit || hasDescriptionEdit;
+  const hasDueDateEdit = dueDayValid && dueDay !== currentDueDay;
+  const hasChanges = hasAmountEdit || hasDescriptionEdit || hasDueDateEdit;
 
   // Pole puste jest dozwolone (BR-04 — rachunek wraca do stanu oczekującego),
   // ale tekst, który nie jest kwotą, blokuje zapis.
@@ -96,7 +108,7 @@ export default function BillDetailScreen() {
       ? strings.validation.amountTooHigh
       : null;
 
-  const canSave = hasChanges && !amountLooksBroken && !amountOutOfRange;
+  const canSave = hasChanges && !amountLooksBroken && !amountOutOfRange && dueDayValid;
 
   const handleSave = () => {
     updatePayment.mutate({
@@ -104,10 +116,14 @@ export default function BillDetailScreen() {
       patch: {
         amountGrosze: amountToSave,
         description: hasDescriptionEdit ? draftDescription?.trim() || null : bill.description,
+        // BR-07: zmiana dotyczy tej jednej płatności. Szablon cykliczny
+        // zostaje nietknięty, więc historia poprzednich miesięcy się nie zmienia.
+        dueDate: dueDateFor(month, dueDay),
       },
     });
     setDraftAmount(undefined);
     setDraftDescription(undefined);
+    setDraftDueDay(undefined);
   };
 
   const handleDelete = async () => {
@@ -149,10 +165,35 @@ export default function BillDetailScreen() {
         </View>
 
         <Card style={styles.details}>
-          <DetailRow
-            label={strings.bills.dueDate}
-            value={bill.dueDate ? formatDate(bill.dueDate) : '—'}
-          />
+          {/* 5.2: termin płatności jest edytowalny — Etap 3 wymaga edycji
+              kwoty, TERMINU i statusu. Zmieniamy dzień w obrębie miesiąca
+              rachunku, bo tak samo opisuje go szablon (defaultDueDay),
+              a dzięki temu nie da się ustawić daty spoza tego miesiąca. */}
+          <View style={styles.dueRow}>
+            <View style={styles.dueTexts}>
+              <Text style={styles.detailLabel}>{strings.bills.dueDate}</Text>
+              <Text style={styles.dueResolved}>
+                {dueDayValid ? formatDate(dueDateFor(month, dueDay)) : '—'}
+              </Text>
+            </View>
+
+            <TextInput
+              value={dueDayText}
+              onChangeText={setDraftDueDay}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={2}
+              accessibilityLabel={strings.bills.dueDayLabel}
+              style={[styles.dayInput, !dueDayValid && styles.dayInputError]}
+            />
+          </View>
+
+          {!dueDayValid ? (
+            <Text style={styles.error}>{strings.bills.dueDayInvalid}</Text>
+          ) : (
+            <Text style={styles.hint}>{strings.bills.dueDayHint}</Text>
+          )}
+
           <DetailRow
             label={strings.bills.paidDate}
             value={bill.paidDate ? formatDate(bill.paidDate) : '—'}
@@ -209,6 +250,13 @@ export default function BillDetailScreen() {
             onPress={handleDelete}
             loading={deletePayment.isPending}
           />
+
+          {/* 5.8: „Usunięcie szablonu rachunku wymaga osobnego działania
+              w szczegółach źródła." Bez tego zdania nie widać różnicy między
+              usunięciem jednego miesiąca a zakończeniem rachunku cyklicznego. */}
+          {bill.billTemplateId !== null ? (
+            <Text style={styles.deleteHint}>{strings.bills.deleteHint}</Text>
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -293,6 +341,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
+  dueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  dueTexts: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  dueResolved: {
+    fontSize: fontSize.body,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  dayInput: {
+    width: 64,
+    textAlign: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    fontSize: fontSize.label,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  dayInputError: {
+    borderColor: colors.statusOverdue,
+  },
+  hint: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+  },
+  error: {
+    fontSize: fontSize.caption,
+    color: colors.statusOverdue,
+  },
   descriptionInput: {
     minHeight: 80,
     backgroundColor: colors.surface,
@@ -311,6 +397,12 @@ const styles = StyleSheet.create({
   emptyHistory: {
     fontSize: fontSize.body,
     color: colors.textMuted,
+  },
+  deleteHint: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   missing: {
     fontSize: fontSize.body,
