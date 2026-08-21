@@ -7,6 +7,7 @@
  * była możliwa właśnie dzięki temu szwowi.
  */
 
+import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
 import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
@@ -611,5 +612,186 @@ export class SqliteExpensesRepository implements ExpensesRepository {
 
   markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void> {
     return this.markGenerated('SUBSCRIPTION', subscriptionId, month);
+  }
+
+  // --- Kopia zapasowa (Etap 10) ---
+
+  /**
+   * Wydaje wiersz płatności BEZ wyliczania statusu.
+   *
+   * `toPayment` celowo wylicza status na dziś (BR-11). Do kopii to byłoby
+   * błędem: rachunek zapisany dziś jako „po terminie" wróciłby po terminie
+   * także wtedy, gdyby kopię odtworzono przed upływem tego terminu.
+   * Kopia zapisuje to, co w bazie, a nie to, co wychodzi z wyliczenia.
+   */
+  private toStoredPayment(row: PaymentRow): Payment {
+    return { ...this.toPayment(row), status: row.status as Payment['status'] };
+  }
+
+  async exportSnapshot(): Promise<BackupSnapshot> {
+    // Bez `WHERE isActive = 1` — kopia bierze też rekordy ukryte (7.5).
+    // Pominięcie ich sprawiłoby, że po odtworzeniu wyłączony rachunek
+    // cykliczny wróciłby jako aktywny albo zniknąłby razem z historią.
+    const categoryRows = await this.db.all<CategoryRow>(
+      'SELECT id, name, iconKey, isActive, sortOrder, usedBy FROM category ORDER BY id'
+    );
+    const paymentRows = await this.db.all<PaymentRow>(
+      `SELECT ${PAYMENT_COLUMNS} FROM payment ORDER BY id`
+    );
+    const billTemplateRows = await this.db.all<BillTemplateRow>(
+      `SELECT id, name, categoryId, defaultDueDay, isActive, useFixedAmount,
+              fixedAmountGrosze, createdAt, updatedAt
+         FROM bill_template ORDER BY id`
+    );
+    const subscriptionRows = await this.db.all<SubscriptionRow>(
+      `SELECT id, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
+              nextPaymentDate, categoryId, isActive, lastUsageConfirmationDate,
+              confirmationIntervalMonths, createdAt, updatedAt
+         FROM subscription ORDER BY id`
+    );
+    const generatedRows = await this.db.all<GeneratedRecord>(
+      `SELECT sourceType, sourceId, year, month
+         FROM generated_record ORDER BY sourceType, sourceId, year, month`
+    );
+
+    return {
+      categories: categoryRows.map((row) => this.toCategory(row)),
+      payments: paymentRows.map((row) => this.toStoredPayment(row)),
+      billTemplates: billTemplateRows.map((row) => this.toBillTemplate(row)),
+      subscriptions: subscriptionRows.map((row) => this.toSubscription(row)),
+      generatedRecords: generatedRows.map((row) => ({
+        sourceType: row.sourceType,
+        sourceId: row.sourceId,
+        year: row.year,
+        month: row.month,
+      })),
+    };
+  }
+
+  /**
+   * Zastępuje całą zawartość bazy danymi z kopii — w JEDNEJ transakcji.
+   *
+   * Transakcja jest tu warunkiem bezpieczeństwa, nie optymalizacją. Bez niej
+   * zamknięcie aplikacji w połowie odtwarzania zostawiłoby bazę z pustymi
+   * płatnościami i połową kategorii, czyli w stanie gorszym niż przed
+   * odtwarzaniem. `ROLLBACK` przywraca stan sprzed operacji w całości.
+   *
+   * Kolejność kasowania i wstawiania wynika z kluczy obcych (`PRAGMA
+   * foreign_keys = ON`): najpierw znikają rekordy zależne, a pojawiają się
+   * jako ostatnie.
+   */
+  async importSnapshot(snapshot: BackupSnapshot): Promise<void> {
+    await this.db.exec('BEGIN');
+
+    try {
+      await this.db.exec(`
+        DELETE FROM generated_record;
+        DELETE FROM payment;
+        DELETE FROM bill_template;
+        DELETE FROM subscription;
+        DELETE FROM category;
+      `);
+
+      for (const category of snapshot.categories) {
+        await this.db.run(
+          'INSERT INTO category (id, name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, ?, ?, ?, ?)',
+          [
+            category.id,
+            category.name,
+            category.iconKey,
+            toDbBool(category.isActive),
+            category.sortOrder,
+            category.usedBy.join(','),
+          ]
+        );
+      }
+
+      for (const template of snapshot.billTemplates) {
+        await this.db.run(
+          `INSERT INTO bill_template
+             (id, name, categoryId, defaultDueDay, isActive, useFixedAmount,
+              fixedAmountGrosze, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            template.id,
+            template.name,
+            template.categoryId,
+            template.defaultDueDay,
+            toDbBool(template.isActive),
+            toDbBool(template.useFixedAmount),
+            template.fixedAmountGrosze,
+            template.createdAt,
+            template.updatedAt,
+          ]
+        );
+      }
+
+      for (const subscription of snapshot.subscriptions) {
+        await this.db.run(
+          `INSERT INTO subscription
+             (id, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
+              nextPaymentDate, categoryId, isActive, lastUsageConfirmationDate,
+              confirmationIntervalMonths, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            subscription.id,
+            subscription.name,
+            subscription.amountGrosze,
+            subscription.frequencyType,
+            subscription.customIntervalMonths,
+            subscription.startDate,
+            subscription.nextPaymentDate,
+            subscription.categoryId,
+            toDbBool(subscription.isActive),
+            subscription.lastUsageConfirmationDate,
+            subscription.confirmationIntervalMonths,
+            subscription.createdAt,
+            subscription.updatedAt,
+          ]
+        );
+      }
+
+      for (const payment of snapshot.payments) {
+        await this.db.run(
+          `INSERT INTO payment
+             (id, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+              status, source, merchant, description, paymentMethod, billTemplateId,
+              subscriptionId, receiptImagePath, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            payment.id,
+            payment.mainType,
+            payment.categoryId,
+            payment.title,
+            payment.amountGrosze,
+            payment.effectiveDate,
+            payment.dueDate,
+            payment.paidDate,
+            payment.status,
+            payment.source,
+            payment.merchant,
+            payment.description,
+            payment.paymentMethod,
+            payment.billTemplateId,
+            payment.subscriptionId,
+            payment.receiptImagePath,
+            payment.createdAt,
+            payment.updatedAt,
+          ]
+        );
+      }
+
+      for (const record of snapshot.generatedRecords) {
+        await this.db.run(
+          'INSERT OR IGNORE INTO generated_record (sourceType, sourceId, year, month) VALUES (?, ?, ?, ?)',
+          [record.sourceType, record.sourceId, record.year, record.month]
+        );
+      }
+
+      await this.db.exec('COMMIT');
+    } catch (error) {
+      await this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 }

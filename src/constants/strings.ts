@@ -244,6 +244,57 @@ export const strings = {
     placeholder: 'Moduł analizy zostanie dodany w kolejnym etapie.',
   },
 
+  /** Etap 10: kopia zapasowa. */
+  backup: {
+    title: 'Kopia zapasowa',
+    openFromHome: 'Kopia zapasowa',
+    intro:
+      'Wszystkie Twoje dane są zapisane wyłącznie w pamięci tego telefonu. Odinstalowanie aplikacji, awaria albo zgubienie telefonu oznacza ich bezpowrotną utratę. Kopia zapasowa to plik, który możesz wysłać sobie mailem albo zapisać na dysku.',
+
+    createTitle: 'Zapisz kopię',
+    createDescription:
+      'Zbiera wszystkie wydatki, rachunki i subskrypcje do jednego pliku, a potem otwiera okno udostępniania. Wyślij plik gdzieś POZA telefon — kopia leżąca na tym samym urządzeniu nie ochroni przed jego utratą.',
+    createButton: 'Zapisz kopię',
+    createWorking: 'Przygotowuję kopię...',
+    createDone: 'Kopia gotowa',
+    createDoneHint: 'Jeśli okno udostępniania zostało zamknięte, plik nie został nigdzie wysłany.',
+
+    restoreTitle: 'Odtwórz z kopii',
+    restoreDescription: 'Wczytuje wcześniej zapisany plik i przywraca stan z dnia jego powstania.',
+    restoreButton: 'Wybierz plik kopii',
+    restoreWorking: 'Odtwarzam...',
+    restoreConfirmTitle: 'Zastąpić wszystkie dane?',
+    restoreConfirmMessage:
+      'Odtworzenie kopii USUWA wszystko, co jest teraz w aplikacji, i wstawia w to miejsce zawartość pliku. Tej operacji nie można cofnąć. Jeśli masz niezapisane wydatki z ostatnich dni, najpierw zapisz nową kopię.',
+    restoreConfirmButton: 'Zastąp dane',
+    restoreDone: 'Dane zostały odtworzone',
+    restoreDoneFrom: 'Kopia z dnia',
+
+    /** Podsumowanie zawartości kopii — ile czego. */
+    countsPayments: 'Płatności',
+    countsBillTemplates: 'Rachunki cykliczne',
+    countsSubscriptions: 'Subskrypcje',
+    countsCategories: 'Podkategorie',
+
+    /** Powody odmowy — każdy mówi, co konkretnie zrobić. */
+    error: {
+      SHARING_UNAVAILABLE: 'To urządzenie nie potrafi udostępniać plików.',
+      WRITE_FAILED:
+        'Nie udało się zapisać pliku kopii. Sprawdź, czy w telefonie jest wolne miejsce.',
+      READ_FAILED: 'Nie udało się odczytać wskazanego pliku.',
+      NOT_JSON:
+        'Ten plik nie jest kopią zapasową. Upewnij się, że wskazujesz plik z rozszerzeniem .json, a pobieranie zakończyło się w całości.',
+      NOT_BACKUP: 'Ten plik pochodzi z innej aplikacji.',
+      FUTURE_VERSION:
+        'Ta kopia została zapisana w nowszej wersji aplikacji. Zaktualizuj aplikację i spróbuj ponownie.',
+      DAMAGED: 'Plik kopii jest uszkodzony — nic nie zostało zmienione.',
+    },
+
+    /** Ostatnia linia obrony przed fałszywym poczuciem bezpieczeństwa. */
+    warning:
+      'Aplikacja nie tworzy kopii sama. Powtórz to co jakiś czas — kopia sprzed pół roku odtworzy dane sprzed pół roku.',
+  },
+
   /** Teksty wspólne. */
   common: {
     save: 'Zapisz',

@@ -10,6 +10,7 @@
  * SQLite (Etap 1, scenariusz T-16).
  */
 
+import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
 import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
@@ -361,6 +362,74 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   async markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void> {
     this.generatedSubscriptionPayments.add(this.subscriptionGenerationKey(subscriptionId, month));
+  }
+
+  // --- Kopia zapasowa (Etap 10) ---
+
+  /**
+   * Wydaje dane w postaci ZAPISANEJ, bez wyliczonego statusu rachunku.
+   *
+   * BR-11 mówi, że status liczymy przy odczycie. Gdyby kopia zapisała status
+   * wyliczony dzisiaj, rachunek „po terminie" wróciłby po odtworzeniu jako
+   * po terminie na zawsze — nawet gdyby użytkownik odtworzył kopię przed
+   * upływem terminu. Kopiujemy więc to, co leży w danych.
+   */
+  async exportSnapshot(): Promise<BackupSnapshot> {
+    return {
+      categories: this.categories.map((c) => ({ ...c, usedBy: [...c.usedBy] })),
+      payments: this.payments.map((p) => ({ ...p })),
+      billTemplates: this.billTemplates.map((t) => ({ ...t })),
+      subscriptions: this.subscriptions.map((s) => ({ ...s })),
+      generatedRecords: [
+        ...this.readGenerationKeys(this.generatedBills, 'BILL'),
+        ...this.readGenerationKeys(this.generatedSubscriptionPayments, 'SUBSCRIPTION'),
+      ],
+    };
+  }
+
+  async importSnapshot(snapshot: BackupSnapshot): Promise<void> {
+    this.categories = snapshot.categories.map((c) => ({ ...c, usedBy: [...c.usedBy] }));
+    this.payments = snapshot.payments.map((p) => ({ ...p }));
+    this.billTemplates = snapshot.billTemplates.map((t) => ({ ...t }));
+    this.subscriptions = snapshot.subscriptions.map((s) => ({ ...s }));
+
+    this.generatedBills = new Set(
+      snapshot.generatedRecords
+        .filter((r) => r.sourceType === 'BILL')
+        .map((r) => this.generationKey(r.sourceId, { year: r.year, month: r.month }))
+    );
+    this.generatedSubscriptionPayments = new Set(
+      snapshot.generatedRecords
+        .filter((r) => r.sourceType === 'SUBSCRIPTION')
+        .map((r) => this.subscriptionGenerationKey(r.sourceId, { year: r.year, month: r.month }))
+    );
+
+    // Licznik musi ruszyć POWYŻEJ najwyższego odtworzonego identyfikatora.
+    // Gdyby zaczął od 1, pierwszy nowy wydatek dostałby numer zajęty przez
+    // rekord z kopii i nadpisałby go przy edycji.
+    const maxId = (items: { id: number }[]) => items.reduce((max, i) => Math.max(max, i.id), 0);
+
+    this.nextCategoryId = maxId(this.categories) + 1;
+    this.nextPaymentId = maxId(this.payments) + 1;
+    this.nextBillTemplateId = maxId(this.billTemplates) + 1;
+    this.nextSubscriptionId = maxId(this.subscriptions) + 1;
+  }
+
+  /** Rozkłada klucze rejestru z powrotem na rekordy `{ sourceId, rok, miesiąc }`. */
+  private readGenerationKeys(
+    keys: Set<string>,
+    sourceType: GeneratedRecord['sourceType']
+  ): GeneratedRecord[] {
+    return [...keys].map((key) => {
+      const [sourceId, yearMonth] = key.split(':');
+      const [year, month] = yearMonth.split('-');
+      return {
+        sourceType,
+        sourceId: Number(sourceId),
+        year: Number(year),
+        month: Number(month),
+      };
+    });
   }
 
   // --- Pomocnicze ---

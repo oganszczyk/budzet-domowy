@@ -15,6 +15,7 @@
  * interfejs tego nie zakładał, podmiana wymusiłaby przepisanie ekranów.
  */
 
+import type { BackupSnapshot } from '@/domain/backup';
 import type { MainType } from '@/domain/enums';
 import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
 import type { YearMonth } from '@/lib/date';
@@ -146,4 +147,31 @@ export interface ExpensesRepository {
    */
   hasGeneratedSubscriptionPayment(subscriptionId: number, month: YearMonth): Promise<boolean>;
   markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void>;
+
+  // --- Kopia zapasowa (Etap 10) ---
+
+  /**
+   * Wydaje komplet danych do kopii zapasowej.
+   *
+   * Metoda należy do repozytorium, a nie do ekranu ustawień, z tego samego
+   * powodu co cała reszta (8.1): ekran nie ma prawa wiedzieć, że dane leżą
+   * w SQLite. Tu w dodatku chodzi o coś więcej — wierna kopia wymaga sięgnięcia
+   * także po rekordy nieaktywne i po rejestr wygenerowanych rachunków, których
+   * zwykłe metody odczytu celowo nie pokazują.
+   */
+  exportSnapshot(): Promise<BackupSnapshot>;
+
+  /**
+   * ZASTĘPUJE całą zawartość danymi z kopii.
+   *
+   * Zastąpienie, a nie dołączenie. Doklejanie kopii do istniejących danych
+   * dawałoby przy każdym odtworzeniu podwojone wydatki, a użytkownik nie
+   * miałby jak ich rozdzielić. Odtwarzanie ma przywrócić stan z dnia kopii —
+   * i dokładnie to robi.
+   *
+   * Operacja musi być niepodzielna: albo wchodzi cała kopia, albo nie zmienia
+   * się nic. Przerwanie w połowie zostawiłoby aplikację bez starych danych
+   * i bez nowych.
+   */
+  importSnapshot(snapshot: BackupSnapshot): Promise<void>;
 }

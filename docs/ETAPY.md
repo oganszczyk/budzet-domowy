@@ -225,14 +225,14 @@ na 11,97 zł zapisałby się jako 2,24 zł.
 Ekran istnieje od Etapu 0 i celowo pozostaje pusty — 5.9 wymaga osobnej
 specyfikacji przed wdrożeniem wykresów.
 
-## Etap 9 — jakość i wydanie lokalne 🟡 W TOKU
+## Etap 9 — jakość i wydanie lokalne ✅ ZAKOŃCZONY
 
 - [x] Wykonać pełny test scenariuszy z rozdziału 10
 - [x] Sprawdzić migrację bazy na danych istniejących
 - [x] Sprawdzić aplikację bez internetu
 - [x] Sprawdzić odrzucenie uprawnień aparatu
 - [x] Usunąć dane demonstracyjne lub oznaczyć je jako opcjonalne
-- [ ] Zbudować instalacyjny plik APK do testów prywatnych — WYMAGA KONTA EXPO
+- [x] Zbudować instalacyjny plik APK do testów prywatnych
 
 ### Scenariusze z rozdziału 10
 
@@ -275,31 +275,78 @@ Zasiew bazy tworzy wyłącznie kategorie i szablony rachunków — ZERO płatno�
 Generator danych demonstracyjnych pozostał jako narzędzie testowe
 (repozytorium pamięciowe) i nie trafia do aplikacji. Test to potwierdza.
 
-### Ryzyko do sprawdzenia przy pierwszym buildzie
+### Ryzyko OCR — sprawdzone i zamknięte
 
-`expo-doctor` zgłasza, że biblioteka OCR jest nieprzetestowana z Nową
-Architekturą (SDK 54 włącza ją domyślnie). Ostrzeżenia celowo nie wyciszamy.
-To flaga „nikt nie sprawdził", nie „nie działa" — ale potwierdzić da się
-dopiero na zbudowanej aplikacji. Plan awaryjny opisany w `AGENTS.md`:
-najpierw `newArchEnabled: false`, potem ewentualna podmiana biblioteki
-(jeden plik). Aplikacja i tak nie przestanie działać — bez modułu natywnego
-wraca silnik demonstracyjny.
+`expo-doctor` zgłaszał, że biblioteka OCR jest nieprzetestowana z Nową
+Architekturą (SDK 54 włącza ją domyślnie). Ostrzeżenia nadal nie wyciszamy.
 
-### Co zostało: plik APK
+**21.08.2026, build `preview` na fizycznym telefonie: skanowanie paragonu
+odczytuje prawdziwy tekst.** Moduł natywny podnosi się przy włączonej Nowej
+Architekturze. Plan awaryjny zostaje w `AGENTS.md` na wypadek zmiany SDK
+albo wersji biblioteki.
 
-`eas.json` jest gotowy z profilem `development` (APK, development client).
-Zbudowanie wymaga darmowego konta Expo, którego nie mogę założyć —
-zakładanie kont i podawanie haseł to działania po Twojej stronie.
+### Plik APK — zbudowany
 
-Polecenia:
+Konto Expo: `rurikaburi`, projekt `@rurikaburi/dom-apka`.
+Skrót `eas.cmd` w katalogu projektu uruchamia lokalne `eas-cli`
+z certyfikatami systemu Windows (Norton skanuje ruch HTTPS).
+
+W PowerShell trzeba wywołać go ze ścieżką — `.\eas.cmd`, nie `eas.cmd`.
 
 ```
-npx eas login
-npx eas build --profile development --platform android
+.\eas.cmd build --profile preview --platform android
 ```
 
-Po zainstalowaniu tego APK skanowanie paragonu zacznie czytać prawdziwe
-zdjęcia — silnik ML Kit jest już podłączony i wybiera się sam.
+Profil `preview` daje APK działający samodzielnie: kod JS jest w środku,
+aplikacja nie potrzebuje komputera ani internetu. Profil `development`
+zostaje do pracy nad kodem (wymaga `npm start` i wspólnej sieci Wi-Fi).
+
+## Etap 10 — kopia zapasowa ✅ ZAKOŃCZONY
+
+Powód: dane żyły wyłącznie w pliku `domowe-wydatki.db` w prywatnej pamięci
+aplikacji. Odinstalowanie, awaria albo zgubienie telefonu = bezpowrotna utrata.
+Aplikacja nie miała żadnego eksportu.
+
+- [x] Migawka całej zawartości: `exportSnapshot` / `importSnapshot`
+      w obu implementacjach repozytorium
+- [x] Format pliku JSON z wersją i pełną walidacją wczytywanych danych
+- [x] Zapis pliku + systemowe okno „Udostępnij" (`expo-sharing`)
+- [x] Wybór pliku do odtworzenia (`expo-document-picker`)
+- [x] Ekran `/backup`, wejście z ekranu głównego
+- [x] Testy formatu (19) i kontraktu repozytorium (8, na obu implementacjach)
+
+### Dlaczego JSON, a nie kopia pliku `.db`
+
+Kopia pliku bazy odtworzyłaby dane najwierniej, ale wymagałaby zgodności
+wersji schematu. Kopia zrobiona przed migracją nie dałaby się wczytać po
+aktualizacji aplikacji — czyli dokładnie wtedy, gdy jest najbardziej potrzebna.
+Migawka opisuje dane w kategoriach modelu z rozdziału 7, nie tabel.
+
+### Odtwarzanie ZASTĘPUJE, nie dokłada
+
+Doklejanie kopii do istniejących danych dawałoby przy każdym odtworzeniu
+podwojone wydatki, bez możliwości ich rozdzielenia. Odtworzenie przywraca
+stan z dnia kopii — w jednej transakcji SQL, więc przerwanie w połowie
+nie zostawia bazy w stanie pośrednim.
+
+Sprawdzenie pliku następuje PRZED dotknięciem bazy. Wskazanie zdjęcia albo
+uszkodzonego pliku kończy się komunikatem, a dotychczasowe dane zostają
+nietknięte.
+
+### Identyfikatory są częścią kopii
+
+`Payment.categoryId`, `billTemplateId` i `subscriptionId` wskazują na inne
+rekordy. Odtwarzanie zachowuje identyfikatory, a liczniki nowych rekordów
+startują powyżej najwyższego odtworzonego — inaczej pierwszy nowy wydatek
+nadpisałby rekord z kopii.
+
+### Czego kopia NIE obejmuje
+
+Zdjęć paragonów. Baza trzyma wyłącznie ścieżkę do pliku (rozdział 8),
+a same zdjęcia leżą w katalogu aplikacji. Po odtworzeniu kopii na innym
+telefonie wydatek zachowa kwotę, datę i kategorię, ale zdjęcie się nie pokaże.
+Dołączenie zdjęć wymagałoby archiwum ZIP zamiast pojedynczego pliku JSON —
+do rozważenia, jeśli okaże się potrzebne.
 
 ## Odstępstwa od specyfikacji
 

@@ -319,6 +319,116 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
       const history = await repo.listBillAmountHistory(template.id);
       expect(history.map((h) => h.amountGrosze)).toEqual([17200, 16580]);
     });
+
+    // --- Kopia zapasowa (Etap 10) ---
+
+    describe('kopia zapasowa', () => {
+      it('odtworzenie własnej kopii przywraca sumy co do grosza', async () => {
+        const repo = await createRepository();
+        await addPurchase(repo, 12550);
+        await addPurchase(repo, 4499);
+        const expected = await repo.getMonthlyTotals(THIS_MONTH);
+
+        const snapshot = await repo.exportSnapshot();
+        await repo.importSnapshot(snapshot);
+
+        expect(await repo.getMonthlyTotals(THIS_MONTH)).toEqual(expected);
+      });
+
+      it('odtworzenie ZASTĘPUJE dane, a nie dokłada ich do istniejących', async () => {
+        const repo = await createRepository();
+        await addPurchase(repo, 12550);
+        const snapshot = await repo.exportSnapshot();
+        const expected = (await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze;
+
+        // Wydatek dopisany PO zrobieniu kopii. Odtworzenie ma go cofnąć,
+        // a nie zsumować z kopią — inaczej każde odtworzenie podwajałoby dane.
+        await addPurchase(repo, 9900);
+        await repo.importSnapshot(snapshot);
+
+        expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(expected);
+      });
+
+      it('zachowuje powiązanie zakupu z jego podkategorią', async () => {
+        const repo = await createRepository();
+        const created = await addPurchase(repo, 12550);
+        const category = await repo.getCategory(created.categoryId);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        const restored = await repo.getPayment(created.id);
+        expect(restored?.categoryId).toBe(created.categoryId);
+        expect((await repo.getCategory(restored!.categoryId))?.name).toBe(category?.name);
+      });
+
+      it('zachowuje rejestr wygenerowanych rachunków (BR-12)', async () => {
+        const repo = await createRepository();
+        const [template] = await repo.listBillTemplates();
+        await repo.markBillGenerated(template.id, THIS_MONTH);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        // Bez tego automat utworzyłby rachunek drugi raz — także taki,
+        // który użytkownik świadomie usunął.
+        expect(await repo.hasGeneratedBill(template.id, THIS_MONTH)).toBe(true);
+        expect(await repo.hasGeneratedBill(template.id, NEXT_MONTH)).toBe(false);
+      });
+
+      it('obejmuje rachunki cykliczne wyłączone przez użytkownika (7.5)', async () => {
+        const repo = await createRepository();
+        const [template] = await repo.listBillTemplates();
+        await repo.deactivateBillTemplate(template.id);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        const restored = await repo.getBillTemplate(template.id);
+        expect(restored?.isActive).toBe(false);
+      });
+
+      it('zachowuje rachunek bez kwoty jako oczekujący (BR-04)', async () => {
+        const repo = await createRepository();
+        const waiting = await addPurchase(repo, null);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        expect((await repo.getPayment(waiting.id))?.amountGrosze).toBeNull();
+      });
+
+      it('nowy wydatek po odtworzeniu nie nadpisuje rekordu z kopii', async () => {
+        const repo = await createRepository();
+        const before = (await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze;
+        const fromBackup = await addPurchase(repo, 12550);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+        const added = await addPurchase(repo, 9900);
+
+        // Gdyby licznik identyfikatorów wystartował od nowa, nowy wydatek
+        // dostałby numer zajęty przez rekord z kopii i podmienił go —
+        // suma urosłaby wtedy tylko o różnicę kwot, a nie o obie.
+        expect(added.id).not.toBe(fromBackup.id);
+        expect((await repo.getPayment(fromBackup.id))?.amountGrosze).toBe(12550);
+        expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(
+          before + 12550 + 9900
+        );
+      });
+
+      it('odtworzenie pustej kopii opróżnia aplikację', async () => {
+        const repo = await createRepository();
+        await addPurchase(repo, 12550);
+
+        await repo.importSnapshot({
+          categories: [],
+          payments: [],
+          billTemplates: [],
+          subscriptions: [],
+          generatedRecords: [],
+        });
+
+        expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(0);
+        expect(await repo.listHistory()).toEqual([]);
+        expect(await repo.listCategories()).toEqual([]);
+      });
+    });
   });
 }
 

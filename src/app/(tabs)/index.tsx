@@ -9,15 +9,16 @@
  * a hook pyta repozytorium (8.1).
  */
 
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { strings } from '@/constants/strings';
 import { useMonthlyTotals } from '@/features/expenses/queries';
 import { MonthSwitcher } from '@/ui/components/month-switcher';
 import { Screen } from '@/ui/components/screen';
 import { SummaryCard } from '@/ui/components/summary-card';
-import { colors, fontSize, spacing } from '@/ui/theme';
+import { colors, fontSize, radius, spacing } from '@/ui/theme';
 
 /**
  * 5.1: „Brak danych jest prezentowany jako 0,00 zł, bez komunikatu błędu."
@@ -37,6 +38,25 @@ export default function HomeScreen() {
 
   return (
     <Screen>
+      {/*
+        Wejście do kopii zapasowej (Etap 10). Stoi na ekranie głównym, a nie
+        schowane w podekranie, bo funkcja, o której użytkownik nie pamięta,
+        nie chroni jego danych.
+      */}
+      <View style={styles.header}>
+        <Text style={styles.appName}>{strings.app.name}</Text>
+
+        <Pressable
+          onPress={() => router.push('/backup')}
+          accessibilityRole="button"
+          accessibilityLabel={strings.backup.openFromHome}
+          hitSlop={spacing.sm}
+          style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
+        >
+          <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
+        </Pressable>
+      </View>
+
       <MonthSwitcher />
 
       <Text style={styles.sectionLabel}>{strings.home.monthTotal}</Text>
@@ -71,6 +91,28 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  appName: {
+    fontSize: fontSize.label,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  headerButtonPressed: {
+    opacity: 0.6,
+  },
   sectionLabel: {
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
