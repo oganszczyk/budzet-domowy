@@ -55,11 +55,8 @@ export default function PurchasesScreen() {
           label={strings.purchases.scanReceipt}
           icon="camera-outline"
           variant="secondary"
-          // Etap 7 — do tego czasu przycisk istnieje, ale nic nie robi.
-          disabled
-          onPress={() => {}}
+          onPress={() => router.push('/purchases/scan')}
         />
-        <Text style={styles.hint}>{strings.purchases.scanComingSoon}</Text>
       </View>
 
       <Text style={styles.sectionTitle}>{strings.purchases.subcategories}</Text>
@@ -122,10 +119,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.sm,
-  },
-  hint: {
-    fontSize: fontSize.caption,
-    color: colors.textMuted,
   },
   sectionTitle: {
     marginTop: spacing.xl,

@@ -141,7 +141,6 @@ export const strings = {
     subcategories: 'Podkategorie',
     addManual: 'Wpisz ręcznie',
     scanReceipt: 'Zeskanuj paragon',
-    scanComingSoon: 'Skanowanie paragonu powstanie w Etapie 7.',
     amount: 'Kwota',
     date: 'Data',
     dayLabel: 'Dzień miesiąca',
@@ -171,6 +170,36 @@ export const strings = {
     namePlaceholder: 'np. Zwierzęta',
     create: 'Dodaj',
     duplicate: 'Taka podkategoria już istnieje.',
+  },
+
+  /** 5.6: skanowanie paragonu. */
+  scan: {
+    title: 'Skanowanie paragonu',
+    takePhoto: 'Zrób zdjęcie',
+    pickFromGallery: 'Wybierz z galerii',
+    recognizing: 'Rozpoznaję paragon...',
+    retake: 'Ponów zdjęcie',
+    verifyQuestion: 'Czy dane zostały poprawnie odczytane?',
+    verifyHint:
+      'Sprawdź i popraw, zanim zapiszesz. Nic nie zostanie zapisane bez Twojego potwierdzenia.',
+    photoSaved: 'Zdjęcie zostanie zapisane razem z wydatkiem.',
+    amountFrom: 'Kwotę odczytano z wiersza',
+    amountFromLabel: {
+      DO_ZAPLATY: 'DO ZAPŁATY',
+      SUMA: 'SUMA',
+      RAZEM: 'RAZEM',
+      NAJWIEKSZA: 'największa kwota na paragonie',
+    },
+    demoBanner:
+      'Tryb demonstracyjny: rozpoznawanie nie czyta Twojego zdjęcia, tylko podstawia przykładowy paragon. Prawdziwy odczyt wymaga własnej wersji aplikacji (development build) — Expo Go nie obsługuje modułów natywnych.',
+    noPermission: 'Brak zgody na dostęp do aparatu.',
+    noPermissionHint: 'Możesz jej udzielić w ustawieniach telefonu albo wybrać zdjęcie z galerii.',
+    openSettings: 'Otwórz ustawienia',
+    noText: 'Nie udało się odczytać tekstu ze zdjęcia.',
+    engineUnavailable: 'Rozpoznawanie tekstu nie jest dostępne w tej wersji aplikacji.',
+    ocrError: 'Rozpoznawanie nie powiodło się.',
+    fillManually: 'Uzupełnij dane ręcznie',
+    amountRequired: 'Podaj kwotę — bez niej nie można zapisać.',
   },
 
   /** 5.8: szczegóły płatności. */

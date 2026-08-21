@@ -177,9 +177,53 @@ Sprawdzone w działającej aplikacji:
 | AC 5.7: usunięcie znika z sum        | suma 3 752,08 na 3 552,08 zł, lipcowy Lidl nietknięty           |
 | Zgodność z ekranem głównym           | trzy karty sumują się do 3 552,08 zł — tyle samo co historia    |
 
-## Etap 7 — skanowanie paragonu ⬜
+## Etap 7 — skanowanie paragonu ✅ ZAKOŃCZONY (z ograniczeniem)
 
-## Etap 8 — analiza jako placeholder ⬜
+- [x] Dodać obsługę aparatu i wyboru zdjęcia z galerii
+- [x] Utworzyć interfejs ReceiptOcrService
+- [x] Zaimplementować ekstrakcję sklepu, daty i kwoty
+- [x] Zaimplementować ekran weryfikacji i ręcznej korekty
+- [x] Dodać opcjonalne lokalne przechowywanie zdjęcia
+- [x] Obsłużyć brak uprawnień i nieczytelny skan
+
+### OGRANICZENIE: prawdziwe OCR wymaga development build
+
+Rozpoznawanie tekstu na urządzeniu potrzebuje modułu natywnego (ML Kit na
+Androidzie, Vision na iOS). Takie moduły NIE DZIAŁAJĄ w Expo Go — potrzebna
+jest własna wersja aplikacji zbudowana przez EAS Build.
+
+Dopóki testujemy w Expo Go, aktywny jest silnik demonstracyjny: zwraca
+przykładowy paragon zamiast czytać zdjęcie. Ekran weryfikacji mówi o tym
+wprost żółtym ostrzeżeniem, żeby dane nie wyglądały na odczytane naprawdę.
+
+**Podmiana na prawdziwy silnik to jedna funkcja:** `createOcrService()`
+w `src/features/receipts/ocr-service.ts`. Reguły z 5.6 i cały ekran
+zostają bez zmian — po to ten interfejs powstał.
+
+### Co jest w pełni zrobione i sprawdzone
+
+Reguły rozpoznawania (5.6) to czysta funkcja `parseReceiptText`, przetestowana
+na realistycznych polskich paragonach — 22 testy. Najważniejsza pułapka:
+„SUMA PTU" to suma podatku, nie należność. Bez jej wykluczenia paragon
+na 11,97 zł zapisałby się jako 2,24 zł.
+
+| Reguła z 5.6                            | Sprawdzenie                               |
+| --------------------------------------- | ----------------------------------------- |
+| „DO ZAPŁATY" ponad „SUMA" ponad „RAZEM" | trzy testy priorytetów                    |
+| Pomijanie sum częściowych               | pozycje z listy zakupów ignorowane        |
+| Pomijanie reszty i gotówki              | paragon 23,50 zł mimo „GOTÓWKA 50,00"     |
+| Data musi być prawidłowa kalendarzowo   | 31.02.2026 odrzucone, 29.02.2028 przyjęte |
+| Nazwa sklepu jest sugestią              | adres, NIP i kod pocztowy pomijane        |
+| Brak kwoty nie wysadza parsera          | zwraca puste pole do uzupełnienia         |
+| BR-08: brak automatycznego zapisu       | rekord powstaje wyłącznie w handleSave    |
+
+## Etap 8 — analiza jako placeholder ✅ ZAKOŃCZONY
+
+- [x] Dodać ekran z informacją o przyszłym module
+- [ ] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji
+
+Ekran istnieje od Etapu 0 i celowo pozostaje pusty — 5.9 wymaga osobnej
+specyfikacji przed wdrożeniem wykresów.
 
 ## Etap 9 — jakość i wydanie lokalne ⬜
 
