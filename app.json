@@ -47,6 +47,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c826872e-ec44-4b69-a7dd-afb292507a40"
+      }
+    },
+    "owner": "rurikaburi"
   }
 }
