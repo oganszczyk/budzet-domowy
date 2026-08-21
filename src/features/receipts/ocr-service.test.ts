@@ -1,3 +1,4 @@
+import { isMlKitAvailable, mlKitOcrService } from './mlkit-ocr-service';
 import { createOcrService, scanReceipt, unavailableOcrService } from './ocr-service';
 import type { ReceiptOcrService } from './ocr-service';
 
@@ -64,8 +65,15 @@ describe('scanReceipt (5.6, BR-08)', () => {
   });
 });
 
-describe('aktywny silnik OCR', () => {
-  it('działa i zwraca komplet pól', async () => {
+describe('wybór silnika zależny od środowiska', () => {
+  it('bez modułu natywnego wybiera silnik demonstracyjny', () => {
+    // Testy działają bez React Native, więc ML Kit jest niedostępny —
+    // dokładnie jak w Expo Go.
+    expect(isMlKitAvailable()).toBe(false);
+    expect(createOcrService().readsImage).toBe(false);
+  });
+
+  it('silnik demonstracyjny przechodzi cały przepływ i zwraca komplet pól', async () => {
     const result = await scanReceipt('plik.jpg', createOcrService());
 
     expect(result.status).toBe('OK');
@@ -74,13 +82,19 @@ describe('aktywny silnik OCR', () => {
     expect(result.fields.merchant).toBe('LIDL SP. Z O.O. SP.K.');
     expect(result.fields.amountGrosze).toBe(2046);
     expect(result.fields.amountSource).toBe('SUMA');
+    // Ta flaga steruje ostrzeżeniem na ekranie weryfikacji. Bez niej dane
+    // wyglądałyby na odczytane z prawdziwego paragonu użytkownika.
+    expect(result.readsImage).toBe(false);
   });
 
-  it('uczciwie deklaruje, że nie czyta zdjęcia', async () => {
-    // W Expo Go nie ma modułu natywnego do rozpoznawania tekstu, więc
-    // aktywny silnik jest demonstracyjny. Ta flaga steruje ostrzeżeniem
-    // na ekranie weryfikacji — bez niej dane wyglądałyby na odczytane
-    // z prawdziwego paragonu użytkownika.
-    expect(createOcrService().readsImage).toBe(false);
+  it('silnik ML Kit deklaruje, że czyta zdjęcie', () => {
+    // We własnej wersji aplikacji to on zostanie wybrany, a ostrzeżenie zniknie.
+    expect(mlKitOcrService.readsImage).toBe(true);
+  });
+
+  it('ML Kit bez modułu natywnego zgłasza brak silnika, zamiast rzucać wyjątkiem', async () => {
+    expect(await scanReceipt('plik.jpg', mlKitOcrService)).toEqual({
+      status: 'ENGINE_UNAVAILABLE',
+    });
   });
 });

@@ -23,6 +23,7 @@
  * po to ten interfejs istnieje.
  */
 
+import { isMlKitAvailable, mlKitOcrService } from './mlkit-ocr-service';
 import { parseReceiptText, type ReceiptFields } from './parse-receipt';
 
 export type OcrOutcome =
@@ -90,13 +91,18 @@ export const unavailableOcrService: ReceiptOcrService = {
 };
 
 /**
- * Wybiera aktywny silnik OCR.
+ * Wybiera aktywny silnik OCR — automatycznie, bez przełączników.
  *
- * TO JEST MIEJSCE DO PODMIANY, gdy powstanie development build
- * z prawdziwym rozpoznawaniem tekstu.
+ * We własnej wersji aplikacji (development build) moduł natywny ML Kit jest
+ * podłączony, więc rozpoznawanie czyta prawdziwe zdjęcie. W Expo Go modułu
+ * nie ma, więc wraca silnik demonstracyjny i ekran weryfikacji o tym ostrzega.
+ *
+ * Wykrywanie w czasie działania, a nie flaga w konfiguracji, jest tu ważne:
+ * ten sam kod działa w obu środowiskach i nie da się przez pomyłkę wydać
+ * aplikacji z silnikiem demonstracyjnym.
  */
 export function createOcrService(): ReceiptOcrService {
-  return demoOcrService;
+  return isMlKitAvailable() ? mlKitOcrService : demoOcrService;
 }
 
 export type ScanOutcome =
