@@ -203,6 +203,10 @@ export const strings = {
   history: {
     title: 'Historia płatności',
     empty: 'Brak zapisanych płatności.',
+    emptyHint:
+      'Tu pojawią się wszystkie zapisane płatności: rachunki z uzupełnioną kwotą, subskrypcje i zakupy.',
+    monthTotal: 'Razem',
+    waitingHidden: 'Rachunki bez kwoty nie są tu pokazywane.',
   },
 
   /** 5.9: analiza — ekran tymczasowy do czasu osobnej specyfikacji. */

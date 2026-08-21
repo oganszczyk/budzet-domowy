@@ -126,7 +126,27 @@ Sprawdzone w działającej aplikacji:
 | T-04: usunięcie zakupu             | podkategoria wraca do 212,80 zł, pozycja znika           |
 | 5.7: kolejność listy               | od najnowszych: 19.08, 09.08, 03.08                      |
 
-## Etap 6 — historia i szczegóły ⬜
+## Etap 6 — historia i szczegóły ✅ ZAKOŃCZONY
+
+- [x] Zaimplementować wspólną chronologiczną historię
+- [x] Zaimplementować ekran szczegółów zależny od typu płatności (powstał w Etapie 5)
+- [x] Zaimplementować edycję i usuwanie z potwierdzeniem (powstało w Etapie 5)
+- [x] Sprawdzić aktualizację wszystkich sum po zmianach
+
+Historia celowo NIE zależy od wybranego miesiąca. BR-09 dotyczy sum,
+a 5.7 mówi o „wszystkich zapisanych rekordach" — miesiąc jest tu nagłówkiem
+porządkującym, nie filtrem.
+
+Sprawdzone w działającej aplikacji:
+
+| Sprawdzenie                          | Wynik                                                           |
+| ------------------------------------ | --------------------------------------------------------------- |
+| BR-05: rachunek bez kwoty ukryty     | Woda widoczna w lipcu (42,10 zł), ukryta w sierpniu             |
+| 5.7: status tylko przy nieopłaconych | Gaz „Do zapłaty", Prąd „Po terminie", opłacone bez odznaki      |
+| Trasowanie zależne od typu           | rachunek do /bills/[id] z historią kwot, zakup do /payment/[id] |
+| AC 5.7: edycja bez restartu          | Lidl 125,50 na 200,00 zł, suma miesiąca 3 677,58 na 3 752,08 zł |
+| AC 5.7: usunięcie znika z sum        | suma 3 752,08 na 3 552,08 zł, lipcowy Lidl nietknięty           |
+| Zgodność z ekranem głównym           | trzy karty sumują się do 3 552,08 zł — tyle samo co historia    |
 
 ## Etap 7 — skanowanie paragonu ⬜
 
