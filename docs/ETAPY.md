@@ -407,6 +407,40 @@ Kopie zapisane w wersji 1 (Etap 10) nadal się wczytują — brak listy dochodó
 znaczy „nie było ich wtedy", czyli pusta lista. To jest powód, dla którego
 plik w ogóle nosi numer wersji: nowa funkcja nie unieważnia starych kopii.
 
+## Sprawdzone na telefonie — 21.08.2026
+
+Build `preview` z commita `dd9bc94` (Etapy 10 i 11), zainstalowany na wierzchu
+poprzedniej wersji, ten sam klucz podpisujący `Q8cjR6jgTR`.
+
+| Co                                           | Wynik                     |
+| -------------------------------------------- | ------------------------- |
+| Migracja bazy na danych z poprzedniej wersji | ✅ stare dane na miejscu  |
+| Zapisanie kopii zapasowej i wysłanie pliku   | ✅ działa                 |
+| Wpisanie dochodów domowników                 | ✅ działa                 |
+| Wykres budżetu — podział pierścienia         | ✅ wypełnia się poprawnie |
+
+Migracja schematu 1 → 2 przeszła na prawdziwym urządzeniu z prawdziwymi
+danymi, nie tylko w teście. To domyka zasadę 5 z `AGENTS.md` w praktyce:
+aktualizacja aplikacji nie kasuje bazy.
+
+### Niesprawdzone na urządzeniu: ODTWARZANIE kopii
+
+Zapisywanie kopii jest potwierdzone, odtwarzanie NIE. To jedyna funkcja
+w aplikacji, której nie da się sprawdzić bez ryzyka — odtworzenie zastępuje
+całą zawartość, więc nieudana próba kosztuje dane.
+
+Zanim ktokolwiek uzna kopię zapasową za działającą, trzeba sprawdzić
+odtwarzanie. Bezpieczna kolejność:
+
+1. zapisać świeżą kopię i wysłać plik poza telefon,
+2. dopiero wtedy uruchomić odtwarzanie ze wskazaniem tego pliku,
+3. sprawdzić, czy sumy i historia wróciły w komplecie.
+
+Do tego czasu kopia zapasowa jest potwierdzona TYLKO w połowie: wiemy, że
+plik powstaje i zawiera dane (ekran pokazuje liczby rekordów), ale nie mamy
+dowodu z urządzenia, że da się z niego wrócić. Testy kontraktu i formatu
+pokrywają obie strony, więc ryzyko jest niskie — ale nie zerowe.
+
 ## Odstępstwa od specyfikacji
 
 | Punkt specyfikacji | Zapis w dokumencie     | Co robimy                                   | Dlaczego                                                                                                                               |
