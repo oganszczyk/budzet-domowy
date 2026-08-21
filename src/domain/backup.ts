@@ -21,7 +21,7 @@
  * wierną kopią, nie ponownym wpisaniem danych.
  */
 
-import type { BillTemplate, Category, Payment, Subscription } from './models';
+import type { BillTemplate, Category, Income, Payment, Subscription } from './models';
 
 /**
  * Wpis rejestru „ten szablon miał już rekord w tym miesiącu" (BR-12).
@@ -46,6 +46,8 @@ export type BackupSnapshot = {
   billTemplates: BillTemplate[];
   subscriptions: Subscription[];
   generatedRecords: GeneratedRecord[];
+  /** Etap 11: dochody domowników. */
+  incomes: Income[];
 };
 
 /** Ile rekordów każdego rodzaju zawiera migawka — do pokazania użytkownikowi. */
@@ -54,6 +56,7 @@ export type BackupCounts = {
   billTemplates: number;
   subscriptions: number;
   categories: number;
+  incomes: number;
 };
 
 export function countSnapshot(snapshot: BackupSnapshot): BackupCounts {
@@ -62,5 +65,6 @@ export function countSnapshot(snapshot: BackupSnapshot): BackupCounts {
     billTemplates: snapshot.billTemplates.length,
     subscriptions: snapshot.subscriptions.length,
     categories: snapshot.categories.length,
+    incomes: snapshot.incomes.length,
   };
 }

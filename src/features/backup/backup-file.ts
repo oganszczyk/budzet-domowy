@@ -20,16 +20,23 @@
 
 import { BillStatus, FrequencyType, MainType, PaymentMethod, PaymentSource } from '@/domain/enums';
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
-import type { BillTemplate, Category, Payment, Subscription } from '@/domain/models';
+import type { BillTemplate, Category, Income, Payment, Subscription } from '@/domain/models';
 
 /**
  * Wersja FORMATU pliku, nie wersja aplikacji ani schematu bazy.
  *
  * Podnosimy ją tylko wtedy, gdy zmiana układu pliku sprawia, że starsza
- * aplikacja nie zrozumiałaby nowej kopii. Dopisanie pola z wartością
- * domyślną wersji nie zmienia.
+ * aplikacja nie zrozumiałaby nowej kopii.
+ *
+ * Wersja 1: bez dochodów domowników.
+ * Wersja 2: z dochodami (Etap 11).
+ *
+ * Kopie w wersji 1 nadal się wczytują — brakująca lista dochodów znaczy
+ * „nie było ich wtedy", czyli pusta. To jest właśnie powód, dla którego
+ * plik nosi numer wersji: pozwala starym kopiom zachować ważność zamiast
+ * unieważniać je przy każdej nowej funkcji.
  */
-export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_FORMAT_VERSION = 2;
 
 /** Znacznik pozwalający odróżnić naszą kopię od dowolnego innego pliku JSON. */
 export const BACKUP_APP_ID = 'domowe-wydatki';
@@ -225,6 +232,31 @@ function readSubscription(value: unknown): Subscription | null {
   };
 }
 
+/** Miesiąc dochodu — tekst „RRRR-MM" (Etap 11). */
+const isYearMonth = (value: unknown): value is string =>
+  isString(value) && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+
+function readIncome(value: unknown): Income | null {
+  if (!isObject(value)) return null;
+
+  const v = value;
+
+  if (!isInt(v.id) || !isString(v.personName)) return null;
+  // Dochód ujemny nie ma sensu i zepsułby wyliczenie budżetu.
+  if (!isInt(v.amountGrosze) || v.amountGrosze < 0) return null;
+  if (!isYearMonth(v.month)) return null;
+  if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
+
+  return {
+    id: v.id,
+    personName: v.personName,
+    amountGrosze: v.amountGrosze,
+    month: v.month,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+  };
+}
+
 function readGeneratedRecord(value: unknown): GeneratedRecord | null {
   if (!isObject(value)) return null;
 
@@ -293,12 +325,18 @@ export function parseBackup(text: string): BackupParseResult {
   const subscriptions = readAll(s.subscriptions, readSubscription);
   const generatedRecords = readAll(s.generatedRecords, readGeneratedRecord);
 
+  // Kopie w wersji 1 powstały, zanim istniały dochody. Brak listy znaczy
+  // „nie było żadnych", a nie „plik uszkodzony" — inaczej wydanie Etapu 11
+  // unieważniłoby wszystkie wcześniejsze kopie użytkownika.
+  const incomes = s.incomes === undefined ? [] : readAll(s.incomes, readIncome);
+
   if (
     categories === null ||
     payments === null ||
     billTemplates === null ||
     subscriptions === null ||
-    generatedRecords === null
+    generatedRecords === null ||
+    incomes === null
   ) {
     return { ok: false, reason: 'DAMAGED' };
   }
@@ -309,7 +347,7 @@ export function parseBackup(text: string): BackupParseResult {
       app: BACKUP_APP_ID,
       formatVersion: raw.formatVersion,
       createdAt: raw.createdAt,
-      snapshot: { categories, payments, billTemplates, subscriptions, generatedRecords },
+      snapshot: { categories, payments, billTemplates, subscriptions, generatedRecords, incomes },
     },
   };
 }

@@ -89,6 +89,24 @@ export function monthRange(ym: YearMonth): { start: IsoDate; end: IsoDate } {
   };
 }
 
+/**
+ * Miesiąc jako tekst „RRRR-MM" — klucz rekordów przypisanych do miesiąca,
+ * a nie do konkretnego dnia (Etap 11: dochody domowników).
+ *
+ * Ten sam zapis, co pierwsze siedem znaków daty ISO, więc SQL porównuje go
+ * z `substr(effectiveDate, 1, 7)` bez żadnej konwersji, a sortowanie
+ * alfabetyczne jest jednocześnie sortowaniem chronologicznym.
+ */
+export function yearMonthKey({ year, month }: YearMonth): string {
+  return `${year}-${pad2(month)}`;
+}
+
+/** Odwrotność `yearMonthKey`. */
+export function yearMonthFromKey(key: string): YearMonth {
+  const [year, month] = key.split('-');
+  return { year: Number(year), month: Number(month) };
+}
+
 /** Miesiąc, do którego należy dana data. */
 export function yearMonthOf(iso: IsoDate): YearMonth {
   const [year, month] = iso.split('-');

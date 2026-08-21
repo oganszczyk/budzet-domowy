@@ -348,6 +348,65 @@ telefonie wydatek zachowa kwotę, datę i kategorię, ale zdjęcie się nie poka
 Dołączenie zdjęć wymagałoby archiwum ZIP zamiast pojedynczego pliku JSON —
 do rozważenia, jeśli okaże się potrzebne.
 
+## Etap 11 — dochody domowników i wykres budżetu ✅ ZAKOŃCZONY
+
+Rozszerzenie poza pierwotną specyfikację, na życzenie właściciela projektu.
+Aplikacja pokazywała wyłącznie wydatki; nie odpowiadała na pytanie
+„ile mi jeszcze zostało w tym miesiącu".
+
+- [x] Encja `Income` i migracja schematu do wersji 2 (tabela `income`)
+- [x] Metody repozytorium w obu implementacjach + testy kontraktu (7)
+- [x] Wyliczenie budżetu jako czysta funkcja + testy (16)
+- [x] Wykres pierścieniowy (`react-native-svg`) na ekranie głównym
+- [x] Ekran `/income`: lista, dodawanie, zmiana, usuwanie, przepisanie z poprzedniego miesiąca
+- [x] Dochody objęte kopią zapasową (format pliku w wersji 2)
+- [x] Test migracji: dane sprzed aktualizacji przeżywają przejście na wersję 2
+
+### Dochód to osobna encja, nie płatność ujemna
+
+Kusiło, żeby zapisać dochód jako płatność z minusem i nie dokładać tabeli.
+Wtedy jednak każda suma, historia i przyszła analiza musiałaby pamiętać,
+żeby go pominąć — jedno zapomniane miejsce i wypłata pojawia się jako zakup.
+BR-01 mówi zresztą, że każdy zapis należy do jednej z trzech kategorii
+głównych, a dochód nie jest żadną z nich.
+
+Dochód przypisujemy do miesiąca (`RRRR-MM`), nie do dnia. Pytanie brzmi
+„ile wpłynęło w sierpniu", a nie „którego dnia przyszła wypłata".
+
+### Podstawą pierścienia jest większa z liczb: dochód albo wydatki
+
+Gdyby podstawą był zawsze dochód, przekroczenie budżetu dałoby wycinki
+sumujące się do więcej niż pełny okrąg i wykres rysowałby drugą warstwę
+na pierwszej. Gdyby podstawą były zawsze wydatki, zniknęłaby informacja
+„ile zostało", czyli powód powstania wykresu.
+
+Przy takim wyborze pierścień czyta się jednoznacznie: mieścisz się w budżecie
+— widać kolorowe wydatki i szarą resztę; przekroczyłeś — pierścień jest
+w całości wypełniony wydatkami. Test pilnuje, że wycinki zawsze sumują się
+dokładnie do jednego pełnego okręgu.
+
+### Trzy stany karty budżetu
+
+1. **Bez wpisanych dochodów** — w środku suma wydatków i zaproszenie do
+   wpisania zarobków. Zmyślanie budżetu byłoby gorsze niż jego brak.
+2. **W budżecie** — kwota „zostało", pierścień z wydatkami i szarą resztą.
+3. **Po przekroczeniu** — kwota na czerwono z podpisem „ponad budżet",
+   pokazywana bez minusa (słowo mówi to samo, a minus przy dużej czerwonej
+   kwocie czyta się jak błąd aplikacji).
+
+### Błąd znaleziony przy sprawdzaniu na wersji webowej
+
+Obrót pierścienia zapisany przez właściwości `rotation` + `origin` gubił
+punkt obrotu — w DOM wychodziło samo `rotate(-90)`, czyli obrót wokół
+lewego górnego rogu zamiast środka. Poprawione na pełny zapis SVG
+`rotate(-90 środekX środekY)`, który znaczy to samo na każdej platformie.
+
+### Format kopii zapasowej: wersja 2
+
+Kopie zapisane w wersji 1 (Etap 10) nadal się wczytują — brak listy dochodów
+znaczy „nie było ich wtedy", czyli pusta lista. To jest powód, dla którego
+plik w ogóle nosi numer wersji: nowa funkcja nie unieważnia starych kopii.
+
 ## Odstępstwa od specyfikacji
 
 | Punkt specyfikacji | Zapis w dokumencie     | Co robimy                                   | Dlaczego                                                                                                                               |

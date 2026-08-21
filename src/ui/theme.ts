@@ -31,6 +31,17 @@ export const colors = {
   subscriptions: '#7A4DE0',
   purchases: '#12876F',
 
+  /**
+   * Budżet miesiąca (Etap 11).
+   *
+   * `remaining` jest celowo stonowany, a nie kolorowy: to jedyny wycinek
+   * pierścienia, który NIE jest wydatkiem. Gdyby dostał własny mocny kolor,
+   * czytałby się jak czwarta kategoria wydatków.
+   */
+  income: '#12876F',
+  remaining: '#CBD2DC',
+  overspent: '#C42B2B',
+
   /** Kolory statusów rachunku (5.2). */
   statusWaiting: '#8A6410',
   statusWaitingSoft: '#FDF3DA',

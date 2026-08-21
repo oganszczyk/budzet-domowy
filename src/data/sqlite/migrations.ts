@@ -110,6 +110,28 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (sourceType, sourceId, year, month)
   );
   `,
+
+  // --- wersja 2: dochody domowników (Etap 11) ---
+  //
+  // Osobna tabela, a nie płatność z kwotą ujemną — uzasadnienie przy typie
+  // `Income` w `src/domain/models.ts`.
+  //
+  // `month` to tekst 'RRRR-MM', czyli ten sam zapis, co pierwsze siedem
+  // znaków daty ISO. Dochód dotyczy miesiąca, nie konkretnego dnia.
+  `
+  CREATE TABLE income (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personName TEXT NOT NULL,
+    -- BR-03: całkowita liczba groszy, zawsze dodatnia.
+    amountGrosze INTEGER NOT NULL,
+    month TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
+
+  -- Ekran główny pyta o dochody wybranego miesiąca przy każdym otwarciu.
+  CREATE INDEX idx_income_month ON income(month);
+  `,
 ];
 
 /** Wersja schematu, do której doprowadzają wszystkie migracje. */

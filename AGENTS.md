@@ -49,6 +49,8 @@ demonstracyjnego, a ekran o tym informuje.
 2. **Interfejs po polsku, kod po angielsku.** 1.2. Żadnego polskiego tekstu na stałe
    w komponentach — wszystko przez `src/constants/strings.ts`.
 3. **Daty jako tekst ISO `RRRR-MM-DD`.** Nie obiekty `Date` w bazie. Patrz `src/lib/date.ts`.
+   Rekordy przypisane do całego miesiąca, a nie do dnia (dochody domowników),
+   używają `RRRR-MM` — tego samego zapisu, co pierwsze siedem znaków daty ISO.
 4. **Budowa etapami.** Rozdział 9 specyfikacji. Po każdym etapie aplikacja musi się
    kompilować i zachowywać istniejące dane. Nie wdrażaj kilku etapów naraz.
 5. **Migracje, nie kasowanie bazy.** Zmiana schematu = nowa migracja.

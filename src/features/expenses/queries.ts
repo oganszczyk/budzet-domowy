@@ -37,6 +37,14 @@ export const queryKeys = {
   payment: (id: number) => ['expenses', 'payment', id] as const,
   billTemplates: () => ['expenses', 'billTemplates'] as const,
   subscriptions: () => ['expenses', 'subscriptions'] as const,
+  /**
+   * Etap 11: dochody domowników. Klucze siedzą w tej samej gałęzi
+   * `['expenses']`, żeby zapis wydatku unieważniał też budżet — inaczej
+   * kwota „zostało" na ekranie głównym zostawałaby nieaktualna
+   * do restartu aplikacji (AC 5.1).
+   */
+  incomes: (month: YearMonth) => ['expenses', 'incomes', month.year, month.month] as const,
+  incomeTotal: (month: YearMonth) => ['expenses', 'incomeTotal', month.year, month.month] as const,
 };
 
 /** 5.1: trzy sumy na karty ekranu głównego, dla aktualnie wybranego miesiąca. */

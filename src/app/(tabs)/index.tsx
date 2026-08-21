@@ -7,6 +7,11 @@
  * Sumy pochodzą z repozytorium (BR-09 — zależą od wybranego miesiąca).
  * Ekran nie wie, czy dane leżą w pamięci, czy w bazie SQLite — pyta hook,
  * a hook pyta repozytorium (8.1).
+ *
+ * Etap 11 dołożył na górze wykres budżetu. Kolejność jest celowa: najpierw
+ * odpowiedź na pytanie „ile mi jeszcze zostało", potem rozbicie na kategorie.
+ * Pierwsza jest pytaniem, które zadaje się codziennie; drugie sprawdza się,
+ * gdy pierwsza odpowiedź nie spodoba się użytkownikowi.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +20,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { strings } from '@/constants/strings';
 import { useMonthlyTotals } from '@/features/expenses/queries';
+import { useMonthlyBudget } from '@/features/income/queries';
+import { BudgetCard } from '@/ui/components/budget-card';
 import { MonthSwitcher } from '@/ui/components/month-switcher';
 import { Screen } from '@/ui/components/screen';
 import { SummaryCard } from '@/ui/components/summary-card';
@@ -35,6 +42,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { data } = useMonthlyTotals();
   const totals = data ?? EMPTY_TOTALS;
+  const { data: budget } = useMonthlyBudget();
 
   return (
     <Screen>
@@ -58,6 +66,10 @@ export default function HomeScreen() {
       </View>
 
       <MonthSwitcher />
+
+      <Text style={styles.sectionLabel}>{strings.budget.sectionLabel}</Text>
+
+      <BudgetCard budget={budget} onPressIncome={() => router.push('/income')} />
 
       <Text style={styles.sectionLabel}>{strings.home.monthTotal}</Text>
 

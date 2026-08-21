@@ -17,7 +17,14 @@
 
 import type { BackupSnapshot } from '@/domain/backup';
 import type { MainType } from '@/domain/enums';
-import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
+import type {
+  BillTemplate,
+  Category,
+  Income,
+  MonthlyTotals,
+  Payment,
+  Subscription,
+} from '@/domain/models';
 import type { YearMonth } from '@/lib/date';
 
 /** Dane potrzebne do utworzenia nowej płatności. Resztę pól uzupełnia repozytorium. */
@@ -40,6 +47,12 @@ export type SubscriptionPatch = Partial<NewSubscription>;
 
 /** Dane potrzebne do utworzenia podkategorii (7.1). */
 export type NewCategory = Omit<Category, 'id' | 'sortOrder'> & { sortOrder?: number };
+
+/** Dane potrzebne do zapisania dochodu domownika (Etap 11). */
+export type NewIncome = Omit<Income, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** Pola, które wolno zmienić w zapisanym dochodzie. */
+export type IncomePatch = Partial<NewIncome>;
 
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
@@ -147,6 +160,25 @@ export interface ExpensesRepository {
    */
   hasGeneratedSubscriptionPayment(subscriptionId: number, month: YearMonth): Promise<boolean>;
   markSubscriptionPaymentGenerated(subscriptionId: number, month: YearMonth): Promise<void>;
+
+  // --- Dochody domowników (Etap 11) ---
+
+  /** Dochody wpisane na wybrany miesiąc, w kolejności dodania. */
+  listIncomes(month: YearMonth): Promise<Income[]>;
+
+  getIncome(id: number): Promise<Income | null>;
+  createIncome(input: NewIncome): Promise<Income>;
+  updateIncome(id: number, patch: IncomePatch): Promise<Income>;
+  deleteIncome(id: number): Promise<void>;
+
+  /**
+   * Suma dochodów miesiąca w groszach.
+   *
+   * Osobna metoda zamiast sumowania listy w ekranie: ekran główny potrzebuje
+   * wyłącznie sumy, a baza policzy ją jednym zapytaniem, bez przenoszenia
+   * wszystkich rekordów.
+   */
+  getMonthlyIncomeTotal(month: YearMonth): Promise<number>;
 
   // --- Kopia zapasowa (Etap 10) ---
 

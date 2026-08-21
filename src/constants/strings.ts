@@ -244,6 +244,52 @@ export const strings = {
     placeholder: 'Moduł analizy zostanie dodany w kolejnym etapie.',
   },
 
+  /** Etap 11: budżet miesiąca — wykres na ekranie głównym. */
+  budget: {
+    sectionLabel: 'Budżet miesiąca',
+    income: 'Wpłynęło',
+    spent: 'Wydano',
+    remaining: 'Zostało',
+    overspent: 'Ponad budżet',
+    /** Podpis pod kwotą w środku wykresu, gdy nie ma wpisanego dochodu. */
+    spentCenter: 'Wydano',
+    noIncomeHint:
+      'Wpisz, ile zarobili domownicy, a wykres pokaże, ile z tego zostało po odjęciu wydatków.',
+    addIncome: 'Wpisz dochody',
+    editIncome: 'Dochody domowników',
+    emptyMonth: 'W tym miesiącu nie ma jeszcze ani dochodów, ani wydatków.',
+    legend: {
+      BILLS: 'Rachunki',
+      SUBSCRIPTIONS: 'Subskrypcje',
+      PURCHASES: 'Zakupy',
+      REMAINING: 'Zostało',
+    },
+  },
+
+  /** Etap 11: dochody domowników. */
+  income: {
+    title: 'Dochody domowników',
+    intro:
+      'Wpisz, ile pieniędzy wpłynęło w tym miesiącu. Od tej sumy odejmowane są wszystkie wydatki zapisane w aplikacji.',
+    total: 'Razem w tym miesiącu',
+    empty: 'Nie wpisano jeszcze żadnych dochodów na ten miesiąc.',
+    add: 'Dodaj dochód',
+    addTitle: 'Nowy dochód',
+    editTitle: 'Zmień dochód',
+    nameLabel: 'Kto zarobił',
+    namePlaceholder: 'np. Ola, Marek, wynajem',
+    amountLabel: 'Kwota',
+    save: 'Zapisz',
+    deleteConfirmTitle: 'Usunąć ten dochód?',
+    deleteConfirmMessage: 'Tej operacji nie można cofnąć.',
+    copyPrevious: 'Przepisz z poprzedniego miesiąca',
+    copyPreviousHint:
+      'Wypłaty zwykle powtarzają się co miesiąc. Przepisz listę i popraw tylko te kwoty, które się zmieniły.',
+    copyDone: 'Przepisano pozycji:',
+    copyNothing: 'Poprzedni miesiąc nie ma wpisanych dochodów.',
+    monthNote: 'Dochód dotyczy całego miesiąca, nie konkretnego dnia.',
+  },
+
   /** Etap 10: kopia zapasowa. */
   backup: {
     title: 'Kopia zapasowa',
@@ -275,6 +321,7 @@ export const strings = {
     countsBillTemplates: 'Rachunki cykliczne',
     countsSubscriptions: 'Subskrypcje',
     countsCategories: 'Podkategorie',
+    countsIncomes: 'Dochody',
 
     /** Powody odmowy — każdy mówi, co konkretnie zrobić. */
     error: {

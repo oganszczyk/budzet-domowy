@@ -7,7 +7,7 @@
  */
 
 import { MainType, PaymentSource } from '@/domain/enums';
-import { addMonths, currentYearMonth, dueDateFor, todayIso } from '@/lib/date';
+import { addMonths, currentYearMonth, dueDateFor, todayIso, yearMonthKey } from '@/lib/date';
 
 import { InMemoryExpensesRepository } from './in-memory-repository';
 import type { ExpensesRepository } from './repository';
@@ -320,6 +320,87 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
       expect(history.map((h) => h.amountGrosze)).toEqual([17200, 16580]);
     });
 
+    // --- Dochody domowników (Etap 11) ---
+
+    describe('dochody domowników', () => {
+      const monthKey = (m = THIS_MONTH) => yearMonthKey(m);
+
+      const addIncome = (
+        repo: ExpensesRepository,
+        personName: string,
+        amountGrosze: number,
+        m = THIS_MONTH
+      ) => repo.createIncome({ personName, amountGrosze, month: monthKey(m) });
+
+      it('nowy miesiąc zaczyna się bez dochodów, a suma wynosi zero', async () => {
+        const repo = await createRepository();
+
+        expect(await repo.listIncomes(THIS_MONTH)).toEqual([]);
+        // 5.1: brak danych to 0,00 zł, nie błąd i nie pustka.
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(0);
+      });
+
+      it('sumuje dochody wszystkich domowników', async () => {
+        const repo = await createRepository();
+        await addIncome(repo, 'Ola', 620000);
+        await addIncome(repo, 'Marek', 540000);
+
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(1160000);
+      });
+
+      it('BR-09: dochody nie przeciekają między miesiącami', async () => {
+        const repo = await createRepository();
+        await addIncome(repo, 'Ola', 620000);
+        await addIncome(repo, 'Ola', 700000, NEXT_MONTH);
+
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(620000);
+        expect(await repo.getMonthlyIncomeTotal(NEXT_MONTH)).toBe(700000);
+        expect((await repo.listIncomes(THIS_MONTH)).map((i) => i.amountGrosze)).toEqual([620000]);
+      });
+
+      it('zmiana kwoty aktualizuje sumę', async () => {
+        const repo = await createRepository();
+        const created = await addIncome(repo, 'Ola', 620000);
+
+        await repo.updateIncome(created.id, { amountGrosze: 650000 });
+
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(650000);
+        expect((await repo.getIncome(created.id))?.personName).toBe('Ola');
+      });
+
+      it('usunięcie wycofuje dochód z sumy', async () => {
+        const repo = await createRepository();
+        const created = await addIncome(repo, 'Ola', 620000);
+        await addIncome(repo, 'Marek', 540000);
+
+        await repo.deleteIncome(created.id);
+
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(540000);
+        expect(await repo.getIncome(created.id)).toBeNull();
+      });
+
+      it('dochód NIE wchodzi do sum wydatków ani do historii płatności (BR-01)', async () => {
+        const repo = await createRepository();
+        const beforeTotals = await repo.getMonthlyTotals(THIS_MONTH);
+        const beforeHistory = (await repo.listHistory()).length;
+
+        await addIncome(repo, 'Ola', 620000);
+
+        expect(await repo.getMonthlyTotals(THIS_MONTH)).toEqual(beforeTotals);
+        expect((await repo.listHistory()).length).toBe(beforeHistory);
+      });
+
+      it('kopia zapasowa obejmuje dochody', async () => {
+        const repo = await createRepository();
+        await addIncome(repo, 'Ola', 620000);
+
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(620000);
+        expect((await repo.listIncomes(THIS_MONTH))[0].personName).toBe('Ola');
+      });
+    });
+
     // --- Kopia zapasowa (Etap 10) ---
 
     describe('kopia zapasowa', () => {
@@ -422,6 +503,7 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
           billTemplates: [],
           subscriptions: [],
           generatedRecords: [],
+          incomes: [],
         });
 
         expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(0);

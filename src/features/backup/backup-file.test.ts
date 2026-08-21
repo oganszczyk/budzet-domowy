@@ -94,6 +94,16 @@ function buildSnapshot(): BackupSnapshot {
       },
     ],
     generatedRecords: [{ sourceType: 'BILL', sourceId: 5, year: 2026, month: 8 }],
+    incomes: [
+      {
+        id: 3,
+        personName: 'Ola',
+        amountGrosze: 620000,
+        month: '2026-08',
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      },
+    ],
   };
 }
 
@@ -137,6 +147,7 @@ describe('plik kopii zapasowej', () => {
         billTemplates: [],
         subscriptions: [],
         generatedRecords: [],
+        incomes: [],
       };
 
       const result = roundTrip(empty);
@@ -163,6 +174,78 @@ describe('plik kopii zapasowej', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.file.snapshot.payments[0].amountGrosze).toBeNull();
+    });
+  });
+
+  describe('zgodność ze starszymi kopiami', () => {
+    /** Plik z Etapu 10 — powstał, zanim istniały dochody domowników. */
+    function version1File(): string {
+      const raw = JSON.parse(serializeBackup(buildSnapshot(), CREATED_AT));
+      raw.formatVersion = 1;
+      delete raw.snapshot.incomes;
+      return JSON.stringify(raw);
+    }
+
+    it('wczytuje kopię w wersji 1', () => {
+      const result = parseBackup(version1File());
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('traktuje brak dochodów w wersji 1 jako pustą listę, nie jako uszkodzenie', () => {
+      const result = parseBackup(version1File());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.file.snapshot.incomes).toEqual([]);
+    });
+
+    it('zachowuje pozostałe dane z kopii w wersji 1', () => {
+      const result = parseBackup(version1File());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.file.snapshot.payments).toEqual(buildSnapshot().payments);
+    });
+  });
+
+  describe('dochody domowników', () => {
+    it('przechodzą zapis i odczyt bez zmiany', () => {
+      const snapshot = buildSnapshot();
+      const result = roundTrip(snapshot);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.file.snapshot.incomes).toEqual(snapshot.incomes);
+    });
+
+    it('odrzucają kwotę ujemną', () => {
+      const text = corrupted((raw) => {
+        const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+        (snapshot.incomes as Record<string, unknown>[])[0].amountGrosze = -1000;
+      });
+
+      expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
+    });
+
+    it('odrzucają miesiąc w innym formacie niż RRRR-MM', () => {
+      const text = corrupted((raw) => {
+        const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+        (snapshot.incomes as Record<string, unknown>[])[0].month = 'sierpień 2026';
+      });
+
+      expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
+    });
+
+    it('odrzucają miesiąc 00 i 13', () => {
+      for (const month of ['2026-00', '2026-13']) {
+        const text = corrupted((raw) => {
+          const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+          (snapshot.incomes as Record<string, unknown>[])[0].month = month;
+        });
+
+        expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
+      }
     });
   });
 

@@ -119,3 +119,29 @@ export type MonthlyTotals = {
   subscriptionsGrosze: number;
   purchasesGrosze: number;
 };
+
+/**
+ * Etap 11: pieniądze zarobione przez domownika w danym miesiącu.
+ *
+ * ODRĘBNA ENCJA, NIE PŁATNOŚĆ UJEMNA. Kusiło, żeby zapisać dochód jako
+ * płatność z minusem i nie dokładać tabeli — ale wtedy każda suma, historia
+ * i analiza w aplikacji musiałaby pamiętać, żeby go pominąć. Jedno zapomniane
+ * miejsce i wypłata pojawia się jako zakup albo zaniża sumę rachunków.
+ * BR-01 mówi zresztą wprost, że każdy zapis należy do jednej z trzech
+ * kategorii głównych — a dochód nie jest żadną z nich.
+ *
+ * Dochód przypisujemy do MIESIĄCA, nie do dnia. Pytanie brzmi „ile wpłynęło
+ * w sierpniu", a nie „którego dnia przyszła wypłata" — dzień nie zmieniłby
+ * żadnego wyniku, a wymagałby od użytkownika dodatkowej decyzji.
+ */
+export type Income = {
+  id: number;
+  /** Kto zarobił — dowolny tekst, np. „Ola", „Marek", „Wynajem". */
+  personName: string;
+  /** Kwota w groszach (BR-03). Zawsze dodatnia. */
+  amountGrosze: number;
+  /** Miesiąc w formacie „RRRR-MM". */
+  month: string;
+  createdAt: string;
+  updatedAt: string;
+};

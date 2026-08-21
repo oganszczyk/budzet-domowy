@@ -13,8 +13,15 @@
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
-import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
-import { monthRange, todayIso, yearMonthOf, type YearMonth } from '@/lib/date';
+import type {
+  BillTemplate,
+  Category,
+  Income,
+  MonthlyTotals,
+  Payment,
+  Subscription,
+} from '@/domain/models';
+import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
 
 import { buildDemoData } from './demo-data';
 import type {
@@ -22,8 +29,10 @@ import type {
   BillTemplatePatch,
   CategoryTotal,
   ExpensesRepository,
+  IncomePatch,
   NewBillTemplate,
   NewCategory,
+  NewIncome,
   NewPayment,
   NewSubscription,
   PaymentPatch,
@@ -35,6 +44,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   private payments: Payment[] = [];
   private billTemplates: BillTemplate[] = [];
   private subscriptions: Subscription[] = [];
+  /** Etap 11: dochody domowników. */
+  private incomes: Income[] = [];
   private nextPaymentId = 1;
   private nextBillTemplateId = 1;
   /**
@@ -47,6 +58,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   private generatedSubscriptionPayments = new Set<string>();
   private nextSubscriptionId = 1;
   private nextCategoryId = 1;
+  private nextIncomeId = 1;
 
   constructor() {
     this.reset();
@@ -71,6 +83,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       ...template,
       id: this.nextBillTemplateId++,
     }));
+    this.incomes = [];
+    this.nextIncomeId = 1;
     this.nextSubscriptionId = 1;
     this.subscriptions = demo.subscriptions.map((subscription) => ({
       ...subscription,
@@ -364,6 +378,48 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.generatedSubscriptionPayments.add(this.subscriptionGenerationKey(subscriptionId, month));
   }
 
+  // --- Dochody domowników (Etap 11) ---
+
+  async listIncomes(month: YearMonth): Promise<Income[]> {
+    const key = yearMonthKey(month);
+    return this.incomes.filter((i) => i.month === key).sort((a, b) => a.id - b.id);
+  }
+
+  async getIncome(id: number): Promise<Income | null> {
+    return this.incomes.find((i) => i.id === id) ?? null;
+  }
+
+  async createIncome(input: NewIncome): Promise<Income> {
+    const now = new Date().toISOString();
+    const income: Income = { ...input, id: this.nextIncomeId++, createdAt: now, updatedAt: now };
+    this.incomes.push(income);
+    return income;
+  }
+
+  async updateIncome(id: number, patch: IncomePatch): Promise<Income> {
+    const index = this.incomes.findIndex((i) => i.id === id);
+    if (index === -1) throw new Error(`Nie znaleziono dochodu o id ${id}.`);
+
+    const updated: Income = {
+      ...this.incomes[index],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    this.incomes[index] = updated;
+    return updated;
+  }
+
+  async deleteIncome(id: number): Promise<void> {
+    this.incomes = this.incomes.filter((i) => i.id !== id);
+  }
+
+  async getMonthlyIncomeTotal(month: YearMonth): Promise<number> {
+    const key = yearMonthKey(month);
+    return this.incomes
+      .filter((i) => i.month === key)
+      .reduce((total, i) => total + i.amountGrosze, 0);
+  }
+
   // --- Kopia zapasowa (Etap 10) ---
 
   /**
@@ -380,6 +436,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       payments: this.payments.map((p) => ({ ...p })),
       billTemplates: this.billTemplates.map((t) => ({ ...t })),
       subscriptions: this.subscriptions.map((s) => ({ ...s })),
+      incomes: this.incomes.map((i) => ({ ...i })),
       generatedRecords: [
         ...this.readGenerationKeys(this.generatedBills, 'BILL'),
         ...this.readGenerationKeys(this.generatedSubscriptionPayments, 'SUBSCRIPTION'),
@@ -392,6 +449,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.payments = snapshot.payments.map((p) => ({ ...p }));
     this.billTemplates = snapshot.billTemplates.map((t) => ({ ...t }));
     this.subscriptions = snapshot.subscriptions.map((s) => ({ ...s }));
+    this.incomes = snapshot.incomes.map((i) => ({ ...i }));
 
     this.generatedBills = new Set(
       snapshot.generatedRecords
@@ -413,6 +471,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.nextPaymentId = maxId(this.payments) + 1;
     this.nextBillTemplateId = maxId(this.billTemplates) + 1;
     this.nextSubscriptionId = maxId(this.subscriptions) + 1;
+    this.nextIncomeId = maxId(this.incomes) + 1;
   }
 
   /** Rozkłada klucze rejestru z powrotem na rekordy `{ sourceId, rok, miesiąc }`. */

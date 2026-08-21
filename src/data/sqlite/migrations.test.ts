@@ -5,7 +5,7 @@ import path from 'node:path';
 import { MainType, PaymentSource } from '@/domain/enums';
 import { currentYearMonth, dueDateFor } from '@/lib/date';
 
-import { migrate, TARGET_SCHEMA_VERSION } from './migrations';
+import { migrate, MIGRATIONS, TARGET_SCHEMA_VERSION } from './migrations';
 import { openNodeDatabase } from './node-adapter';
 import { seedDefaults } from './seed';
 import { SqliteExpensesRepository } from './sqlite-repository';
@@ -53,6 +53,73 @@ describe('migracje (1.2)', () => {
     expect(names).toContain('generated_record');
   });
 
+  it('tworzą tabelę dochodów z Etapu 11', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+
+    const tables = await db.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+    );
+
+    expect(tables.map((t) => t.name)).toContain('income');
+  });
+
+  /**
+   * 1.2, zasada 5: „Migracje bazy danych zamiast kasowania lokalnej bazy."
+   *
+   * Ten test odgrywa aktualizację aplikacji na telefonie z prawdziwymi danymi:
+   * baza w starej wersji schematu, w niej wydatki użytkownika, a potem nowa
+   * wersja aplikacji. Gdyby migracja kasowała bazę albo się wywracała,
+   * użytkownik straciłby wszystko przy zwykłej aktualizacji.
+   */
+  it('aktualizacja ze starej wersji schematu zachowuje dane użytkownika', async () => {
+    const db = openNodeDatabase();
+
+    // --- stan sprzed Etapu 11: tylko pierwsza migracja ---
+    await db.exec(MIGRATIONS[0]);
+    await db.exec('PRAGMA user_version = 1');
+    await seedDefaults(db);
+
+    const oldRepo = new SqliteExpensesRepository(db);
+    const [category] = await oldRepo.listCategories(MainType.PURCHASE);
+    const created = await oldRepo.createPayment({
+      mainType: MainType.PURCHASE,
+      categoryId: category.id,
+      title: 'Lidl',
+      amountGrosze: 12550,
+      effectiveDate: dueDateFor(THIS_MONTH, 5),
+      dueDate: null,
+      paidDate: null,
+      status: null,
+      source: PaymentSource.MANUAL,
+      merchant: 'Lidl',
+      description: null,
+      paymentMethod: null,
+      billTemplateId: null,
+      subscriptionId: null,
+      receiptImagePath: null,
+    });
+
+    // --- aktualizacja aplikacji ---
+    const result = await migrate(db);
+
+    // Baza istniała, więc to aktualizacja, a nie tworzenie od zera.
+    expect(result.createdFromScratch).toBe(false);
+
+    const version = await db.first<{ user_version: number }>('PRAGMA user_version');
+    expect(version?.user_version).toBe(TARGET_SCHEMA_VERSION);
+
+    // Wydatek sprzed aktualizacji jest nietknięty.
+    const newRepo = new SqliteExpensesRepository(db);
+    expect((await newRepo.getPayment(created.id))?.amountGrosze).toBe(12550);
+    expect((await newRepo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(12550);
+
+    // A nowa funkcja jest gotowa do użycia.
+    expect(await newRepo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(0);
+    await newRepo.createIncome({ personName: 'Ola', amountGrosze: 620000, month: '2026-08' });
+    expect(await newRepo.listIncomes({ year: 2026, month: 8 })).toHaveLength(1);
+  });
+
   it('tworzą indeksy wymagane w 7.5', async () => {
     const db = openNodeDatabase();
     await migrate(db);
@@ -66,6 +133,7 @@ describe('migracje (1.2)', () => {
     expect(names).toContain('idx_payment_main_type_date');
     expect(names).toContain('idx_payment_auto_bill_month');
     expect(names).toContain('idx_payment_auto_subscription_date');
+    expect(names).toContain('idx_income_month');
   });
 });
 

@@ -10,16 +10,25 @@
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
-import type { BillTemplate, Category, MonthlyTotals, Payment, Subscription } from '@/domain/models';
-import { monthRange, todayIso, yearMonthOf, type YearMonth } from '@/lib/date';
+import type {
+  BillTemplate,
+  Category,
+  Income,
+  MonthlyTotals,
+  Payment,
+  Subscription,
+} from '@/domain/models';
+import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
 
 import type {
   BillAmountHistoryEntry,
   BillTemplatePatch,
   CategoryTotal,
   ExpensesRepository,
+  IncomePatch,
   NewBillTemplate,
   NewCategory,
+  NewIncome,
   NewPayment,
   NewSubscription,
   PaymentPatch,
@@ -86,6 +95,15 @@ type SubscriptionRow = {
   updatedAt: string;
 };
 
+type IncomeRow = {
+  id: number;
+  personName: string;
+  amountGrosze: number;
+  month: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** SQLite nie zna typu boolean — zapisujemy 0/1. */
 const toDbBool = (value: boolean): number => (value ? 1 : 0);
 const fromDbBool = (value: number): boolean => value === 1;
@@ -95,6 +113,8 @@ const PAYMENT_COLUMNS = `
   status, source, merchant, description, paymentMethod, billTemplateId,
   subscriptionId, receiptImagePath, createdAt, updatedAt
 `;
+
+const INCOME_COLUMNS = 'id, personName, amountGrosze, month, createdAt, updatedAt';
 
 export class SqliteExpensesRepository implements ExpensesRepository {
   constructor(private readonly db: SqlDatabase) {}
@@ -614,6 +634,81 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     return this.markGenerated('SUBSCRIPTION', subscriptionId, month);
   }
 
+  // --- Dochody domowników (Etap 11) ---
+
+  private toIncome(row: IncomeRow): Income {
+    return {
+      id: row.id,
+      personName: row.personName,
+      amountGrosze: row.amountGrosze,
+      month: row.month,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  async listIncomes(month: YearMonth): Promise<Income[]> {
+    const rows = await this.db.all<IncomeRow>(
+      `SELECT ${INCOME_COLUMNS} FROM income WHERE month = ? ORDER BY id`,
+      [yearMonthKey(month)]
+    );
+    return rows.map((row) => this.toIncome(row));
+  }
+
+  async getIncome(id: number): Promise<Income | null> {
+    const row = await this.db.first<IncomeRow>(
+      `SELECT ${INCOME_COLUMNS} FROM income WHERE id = ?`,
+      [id]
+    );
+    return row ? this.toIncome(row) : null;
+  }
+
+  async createIncome(input: NewIncome): Promise<Income> {
+    const now = new Date().toISOString();
+    const result = await this.db.run(
+      `INSERT INTO income (personName, amountGrosze, month, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?)`,
+      [input.personName, input.amountGrosze, input.month, now, now]
+    );
+
+    const created = await this.getIncome(result.lastInsertRowId);
+    if (!created) throw new Error('Nie udało się zapisać dochodu.');
+    return created;
+  }
+
+  async updateIncome(id: number, patch: IncomePatch): Promise<Income> {
+    const current = await this.getIncome(id);
+    if (!current) throw new Error(`Nie znaleziono dochodu o id ${id}.`);
+
+    const next = { ...current, ...patch };
+
+    await this.db.run(
+      `UPDATE income SET personName = ?, amountGrosze = ?, month = ?, updatedAt = ? WHERE id = ?`,
+      [next.personName, next.amountGrosze, next.month, new Date().toISOString(), id]
+    );
+
+    const updated = await this.getIncome(id);
+    if (!updated) throw new Error(`Nie znaleziono dochodu o id ${id}.`);
+    return updated;
+  }
+
+  async deleteIncome(id: number): Promise<void> {
+    await this.db.run('DELETE FROM income WHERE id = ?', [id]);
+  }
+
+  /**
+   * `COALESCE` zamienia `NULL` na zero. Bez tego miesiąc bez żadnego dochodu
+   * zwróciłby `NULL` (SUM z pustego zbioru), a ekran pokazałby pustkę zamiast
+   * 0,00 zł — wbrew zasadzie z 5.1, że brak danych to zero, nie błąd.
+   */
+  async getMonthlyIncomeTotal(month: YearMonth): Promise<number> {
+    const row = await this.db.first<{ total: number }>(
+      'SELECT COALESCE(SUM(amountGrosze), 0) AS total FROM income WHERE month = ?',
+      [yearMonthKey(month)]
+    );
+    return row?.total ?? 0;
+  }
+
   // --- Kopia zapasowa (Etap 10) ---
 
   /**
@@ -649,6 +744,9 @@ export class SqliteExpensesRepository implements ExpensesRepository {
               confirmationIntervalMonths, createdAt, updatedAt
          FROM subscription ORDER BY id`
     );
+    const incomeRows = await this.db.all<IncomeRow>(
+      `SELECT ${INCOME_COLUMNS} FROM income ORDER BY id`
+    );
     const generatedRows = await this.db.all<GeneratedRecord>(
       `SELECT sourceType, sourceId, year, month
          FROM generated_record ORDER BY sourceType, sourceId, year, month`
@@ -659,6 +757,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       payments: paymentRows.map((row) => this.toStoredPayment(row)),
       billTemplates: billTemplateRows.map((row) => this.toBillTemplate(row)),
       subscriptions: subscriptionRows.map((row) => this.toSubscription(row)),
+      incomes: incomeRows.map((row) => this.toIncome(row)),
       generatedRecords: generatedRows.map((row) => ({
         sourceType: row.sourceType,
         sourceId: row.sourceId,
@@ -686,6 +785,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     try {
       await this.db.exec(`
         DELETE FROM generated_record;
+        DELETE FROM income;
         DELETE FROM payment;
         DELETE FROM bill_template;
         DELETE FROM subscription;
@@ -777,6 +877,21 @@ export class SqliteExpensesRepository implements ExpensesRepository {
             payment.receiptImagePath,
             payment.createdAt,
             payment.updatedAt,
+          ]
+        );
+      }
+
+      for (const income of snapshot.incomes) {
+        await this.db.run(
+          `INSERT INTO income (id, personName, amountGrosze, month, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            income.id,
+            income.personName,
+            income.amountGrosze,
+            income.month,
+            income.createdAt,
+            income.updatedAt,
           ]
         );
       }
