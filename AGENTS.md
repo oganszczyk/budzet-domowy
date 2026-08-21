@@ -19,17 +19,18 @@ Trzymamy się SDK 54, dopóki testujemy na Expo Go. **Nie aktualizuj SDK** bez
 przejścia na development build (`expo-dev-client` + EAS Build) — inaczej
 aplikacja przestanie się otwierać na telefonie.
 
-## Znane ryzyko: biblioteka OCR a Nowa Architektura
+## OCR działa na urządzeniu — ryzyko zamknięte
 
 `@react-native-ml-kit/text-recognition` jest w React Native Directory oznaczona
-jako **nieprzetestowana z Nową Architekturą**, którą SDK 54 włącza domyślnie.
-`npx expo-doctor` zgłasza to jako ostrzeżenie — celowo go NIE wyciszamy.
+jako **nieprzetestowana z Nową Architekturą**, którą SDK 54 włącza domyślnie,
+i `npx expo-doctor` nadal zgłasza to jako ostrzeżenie. Celowo go NIE wyciszamy.
 
-To flaga „nikt nie sprawdził", a nie „na pewno nie działa": React Native 0.81
-ma warstwę zgodności dla modułów starej architektury. Nie da się tego jednak
-potwierdzić bez zbudowania własnej wersji aplikacji.
+**Sprawdzone 21.08.2026 na fizycznym telefonie z Androidem:** skanowanie
+paragonu odczytuje prawdziwy tekst. Build `preview` (EAS, commit `42ef141`,
+SDK 54, Nowa Architektura włączona) — moduł natywny podnosi się poprawnie.
+Ostrzeżenie expo-doctor to flaga "nikt nie sprawdził", nie usterka.
 
-**Jeżeli po zbudowaniu skanowanie nie zadziała**, kolejność działań:
+Gdyby po zmianie SDK albo wersji biblioteki skanowanie przestało działać:
 
 1. Wyłącz Nową Architekturę dla builda — w `app.json` dodaj
    `"newArchEnabled": false` w sekcji `expo` i zbuduj ponownie.
