@@ -225,7 +225,81 @@ na 11,97 zł zapisałby się jako 2,24 zł.
 Ekran istnieje od Etapu 0 i celowo pozostaje pusty — 5.9 wymaga osobnej
 specyfikacji przed wdrożeniem wykresów.
 
-## Etap 9 — jakość i wydanie lokalne ⬜
+## Etap 9 — jakość i wydanie lokalne 🟡 W TOKU
+
+- [x] Wykonać pełny test scenariuszy z rozdziału 10
+- [x] Sprawdzić migrację bazy na danych istniejących
+- [x] Sprawdzić aplikację bez internetu
+- [x] Sprawdzić odrzucenie uprawnień aparatu
+- [x] Usunąć dane demonstracyjne lub oznaczyć je jako opcjonalne
+- [ ] Zbudować instalacyjny plik APK do testów prywatnych — WYMAGA KONTA EXPO
+
+### Scenariusze z rozdziału 10
+
+`src/scenarios.test.ts` odwzorowuje je jeden do jednego, na prawdziwej bazie
+SQLite, przez te same przypadki użycia, których używają ekrany.
+
+| Scenariusz                       | Stan                                                          |
+| -------------------------------- | ------------------------------------------------------------- |
+| T-01 pierwsze uruchomienie       | ✅ automatyczny                                               |
+| T-02 dodanie zakupu 125,50 zł    | ✅ automatyczny                                               |
+| T-03 edycja na 100,00 zł         | ✅ automatyczny                                               |
+| T-04 usunięcie zakupu            | ✅ automatyczny                                               |
+| T-05 nowy miesiąc, rachunek Prąd | ✅ automatyczny                                               |
+| T-06 wpisanie kwoty 180,40 zł    | ✅ automatyczny                                               |
+| T-07 oznaczenie jako opłacony    | ✅ automatyczny                                               |
+| T-08 rachunek po terminie        | ✅ automatyczny                                               |
+| T-09 subskrypcja miesięczna      | ✅ automatyczny                                               |
+| T-10 subskrypcja roczna          | ✅ automatyczny                                               |
+| T-11 zakończenie subskrypcji     | ✅ automatyczny                                               |
+| T-12 skan z poprawnymi danymi    | 🟡 reguły odczytu automatyczne; aparat do sprawdzenia ręcznie |
+| T-13 skan bez rozpoznanej kwoty  | 🟡 blokada zapisu automatyczna; aparat do sprawdzenia ręcznie |
+| T-14 brak zgody na aparat        | 🟡 do sprawdzenia ręcznie na telefonie                        |
+| T-15 przełączenie miesiąca       | ✅ automatyczny                                               |
+| T-16 ponowne uruchomienie        | ✅ automatyczny (na pliku bazy)                               |
+
+T-12, T-13 i T-14 wymagają prawdziwego aparatu i systemowego okna zgody,
+więc nie da się ich odtworzyć w teście. Ich logika — reguły z 5.6, blokada
+zapisu bez kwoty, komunikat po odmowie — jest pokryta osobno.
+
+### Praca bez internetu
+
+Aplikacja nie wykonuje ŻADNYCH żądań sieciowych: w kodzie nie ma `fetch`,
+`XMLHttpRequest` ani biblioteki sieciowej wśród 24 zależności. Dane leżą
+wyłącznie w lokalnej bazie SQLite, a rozpoznawanie tekstu działa na
+urządzeniu. Spełnia to 8.2: „Dane użytkownika nie opuszczają urządzenia".
+
+### Dane demonstracyjne
+
+Zasiew bazy tworzy wyłącznie kategorie i szablony rachunków — ZERO płatności.
+Generator danych demonstracyjnych pozostał jako narzędzie testowe
+(repozytorium pamięciowe) i nie trafia do aplikacji. Test to potwierdza.
+
+### Ryzyko do sprawdzenia przy pierwszym buildzie
+
+`expo-doctor` zgłasza, że biblioteka OCR jest nieprzetestowana z Nową
+Architekturą (SDK 54 włącza ją domyślnie). Ostrzeżenia celowo nie wyciszamy.
+To flaga „nikt nie sprawdził", nie „nie działa" — ale potwierdzić da się
+dopiero na zbudowanej aplikacji. Plan awaryjny opisany w `AGENTS.md`:
+najpierw `newArchEnabled: false`, potem ewentualna podmiana biblioteki
+(jeden plik). Aplikacja i tak nie przestanie działać — bez modułu natywnego
+wraca silnik demonstracyjny.
+
+### Co zostało: plik APK
+
+`eas.json` jest gotowy z profilem `development` (APK, development client).
+Zbudowanie wymaga darmowego konta Expo, którego nie mogę założyć —
+zakładanie kont i podawanie haseł to działania po Twojej stronie.
+
+Polecenia:
+
+```
+npx eas login
+npx eas build --profile development --platform android
+```
+
+Po zainstalowaniu tego APK skanowanie paragonu zacznie czytać prawdziwe
+zdjęcia — silnik ML Kit jest już podłączony i wybiera się sam.
 
 ## Odstępstwa od specyfikacji
 

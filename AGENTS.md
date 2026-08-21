@@ -19,6 +19,28 @@ Trzymamy się SDK 54, dopóki testujemy na Expo Go. **Nie aktualizuj SDK** bez
 przejścia na development build (`expo-dev-client` + EAS Build) — inaczej
 aplikacja przestanie się otwierać na telefonie.
 
+## Znane ryzyko: biblioteka OCR a Nowa Architektura
+
+`@react-native-ml-kit/text-recognition` jest w React Native Directory oznaczona
+jako **nieprzetestowana z Nową Architekturą**, którą SDK 54 włącza domyślnie.
+`npx expo-doctor` zgłasza to jako ostrzeżenie — celowo go NIE wyciszamy.
+
+To flaga „nikt nie sprawdził", a nie „na pewno nie działa": React Native 0.81
+ma warstwę zgodności dla modułów starej architektury. Nie da się tego jednak
+potwierdzić bez zbudowania własnej wersji aplikacji.
+
+**Jeżeli po zbudowaniu skanowanie nie zadziała**, kolejność działań:
+
+1. Wyłącz Nową Architekturę dla builda — w `app.json` dodaj
+   `"newArchEnabled": false` w sekcji `expo` i zbuduj ponownie.
+2. Jeżeli to nie pomoże, podmień bibliotekę. Zmiana dotyczy WYŁĄCZNIE pliku
+   `src/features/receipts/mlkit-ocr-service.ts` — reguły odczytu z 5.6
+   i cały ekran skanowania zostają bez zmian.
+
+Aplikacja nie przestanie działać w żadnym z tych przypadków: gdy moduł
+natywny jest niedostępny, `createOcrService()` sam wraca do silnika
+demonstracyjnego, a ekran o tym informuje.
+
 ## Zasady, których nie wolno złamać
 
 1. **Kwoty tylko w groszach.** BR-03. `125,50 zł` to `12550`. Nigdy nie używaj liczb
