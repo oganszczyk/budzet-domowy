@@ -45,7 +45,7 @@ export function useMonthlyTotals() {
 
   return useQuery({
     queryKey: queryKeys.monthlyTotals(month),
-    queryFn: () => getRepository().getMonthlyTotals(month),
+    queryFn: async () => (await getRepository()).getMonthlyTotals(month),
   });
 }
 
@@ -55,7 +55,7 @@ export function useCategoryTotals(mainType: MainType) {
 
   return useQuery({
     queryKey: queryKeys.categoryTotals(month, mainType),
-    queryFn: () => getRepository().getCategoryTotals(month, mainType),
+    queryFn: async () => (await getRepository()).getCategoryTotals(month, mainType),
   });
 }
 
@@ -65,7 +65,7 @@ export function usePaymentsForMonth(mainType?: MainType) {
 
   return useQuery({
     queryKey: queryKeys.paymentsForMonth(month, mainType),
-    queryFn: () => getRepository().listPaymentsForMonth(month, mainType),
+    queryFn: async () => (await getRepository()).listPaymentsForMonth(month, mainType),
   });
 }
 
@@ -73,7 +73,7 @@ export function usePaymentsForMonth(mainType?: MainType) {
 export function useHistory() {
   return useQuery({
     queryKey: queryKeys.history(),
-    queryFn: () => getRepository().listHistory(),
+    queryFn: async () => (await getRepository()).listHistory(),
   });
 }
 
@@ -81,6 +81,6 @@ export function useHistory() {
 export function useCategories(mainType?: MainType) {
   return useQuery({
     queryKey: queryKeys.categories(mainType),
-    queryFn: () => getRepository().listCategories(mainType),
+    queryFn: async () => (await getRepository()).listCategories(mainType),
   });
 }

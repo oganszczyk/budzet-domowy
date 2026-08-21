@@ -26,7 +26,7 @@ export function useSubscriptionsScreen() {
   return useQuery({
     queryKey: ['expenses', 'subscriptionsScreen', month.year, month.month] as const,
     queryFn: async () => {
-      const repository = getRepository();
+      const repository = await getRepository();
       await generateSubscriptionPayments(repository, month);
 
       const [subscriptions, payments] = await Promise.all([
@@ -43,7 +43,7 @@ export function useSubscriptionsScreen() {
 export function useSubscription(id: number) {
   return useQuery({
     queryKey: ['expenses', 'subscription', id] as const,
-    queryFn: () => getRepository().getSubscription(id),
+    queryFn: async () => (await getRepository()).getSubscription(id),
   });
 }
 
@@ -57,7 +57,7 @@ export function useCreateSubscription() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (input: NewSubscription) => getRepository().createSubscription(input),
+    mutationFn: async (input: NewSubscription) => (await getRepository()).createSubscription(input),
     onSuccess: invalidate,
   });
 }
@@ -72,8 +72,8 @@ export function useUpdateSubscription() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: SubscriptionPatch }) =>
-      getRepository().updateSubscription(id, patch),
+    mutationFn: async ({ id, patch }: { id: number; patch: SubscriptionPatch }) =>
+      (await getRepository()).updateSubscription(id, patch),
     onSuccess: invalidate,
   });
 }
@@ -86,7 +86,8 @@ export function useEndSubscription() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) => getRepository().updateSubscription(id, { isActive: false }),
+    mutationFn: async (id: number) =>
+      (await getRepository()).updateSubscription(id, { isActive: false }),
     onSuccess: invalidate,
   });
 }
@@ -96,8 +97,8 @@ export function useResumeSubscription() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) =>
-      getRepository().updateSubscription(id, {
+    mutationFn: async (id: number) =>
+      (await getRepository()).updateSubscription(id, {
         isActive: true,
         lastUsageConfirmationDate: todayIso(),
       }),
@@ -113,8 +114,8 @@ export function useConfirmSubscriptionUsage() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) =>
-      getRepository().updateSubscription(id, { lastUsageConfirmationDate: todayIso() }),
+    mutationFn: async (id: number) =>
+      (await getRepository()).updateSubscription(id, { lastUsageConfirmationDate: todayIso() }),
     onSuccess: invalidate,
   });
 }

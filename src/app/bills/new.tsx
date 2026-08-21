@@ -82,7 +82,7 @@ export default function NewBillTemplateScreen() {
         onSuccess: async () => {
           // Utwórz rekord na wybrany miesiąc, żeby nowy rachunek
           // pojawił się na liście od razu (BR-12 chroni przed duplikatem).
-          await generateMonthlyBills(getRepository(), month);
+          await generateMonthlyBills(await getRepository(), month);
           goToBills();
         },
       }

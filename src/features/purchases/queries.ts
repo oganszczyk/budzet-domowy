@@ -15,7 +15,7 @@ export function usePurchaseCategoryTotals() {
 
   return useQuery({
     queryKey: queryKeys.categoryTotals(month, MainType.PURCHASE),
-    queryFn: () => getRepository().getCategoryTotals(month, MainType.PURCHASE),
+    queryFn: async () => (await getRepository()).getCategoryTotals(month, MainType.PURCHASE),
   });
 }
 
@@ -26,7 +26,7 @@ export function usePurchasesInCategory(categoryId: number) {
   return useQuery({
     queryKey: ['expenses', 'purchasesInCategory', month.year, month.month, categoryId] as const,
     queryFn: async () => {
-      const repository = getRepository();
+      const repository = await getRepository();
       const [category, payments] = await Promise.all([
         repository.getCategory(categoryId),
         repository.listPaymentsForCategory(month, categoryId, MainType.PURCHASE),
@@ -40,6 +40,6 @@ export function usePurchasesInCategory(categoryId: number) {
 export function usePayment(id: number) {
   return useQuery({
     queryKey: queryKeys.payment(id),
-    queryFn: () => getRepository().getPayment(id),
+    queryFn: async () => (await getRepository()).getPayment(id),
   });
 }

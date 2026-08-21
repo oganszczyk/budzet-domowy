@@ -26,7 +26,7 @@ export function useBillsForMonth() {
   return useQuery({
     queryKey: queryKeys.paymentsForMonth(month, MainType.BILL),
     queryFn: async () => {
-      const repository = getRepository();
+      const repository = await getRepository();
       await generateMonthlyBills(repository, month);
       return repository.listPaymentsForMonth(month, MainType.BILL);
     },
@@ -37,7 +37,7 @@ export function useBillsForMonth() {
 export function useBill(id: number) {
   return useQuery({
     queryKey: queryKeys.payment(id),
-    queryFn: () => getRepository().getPayment(id),
+    queryFn: async () => (await getRepository()).getPayment(id),
   });
 }
 
@@ -45,10 +45,10 @@ export function useBill(id: number) {
 export function useBillAmountHistory(billTemplateId: number | null) {
   return useQuery({
     queryKey: ['expenses', 'billAmountHistory', billTemplateId ?? 'none'] as const,
-    queryFn: () =>
-      billTemplateId === null
-        ? Promise.resolve([])
-        : getRepository().listBillAmountHistory(billTemplateId),
+    queryFn: async () => {
+      if (billTemplateId === null) return [];
+      return (await getRepository()).listBillAmountHistory(billTemplateId);
+    },
   });
 }
 
@@ -56,7 +56,7 @@ export function useBillAmountHistory(billTemplateId: number | null) {
 export function useBillTemplates() {
   return useQuery({
     queryKey: queryKeys.billTemplates(),
-    queryFn: () => getRepository().listBillTemplates(),
+    queryFn: async () => (await getRepository()).listBillTemplates(),
   });
 }
 
@@ -64,7 +64,7 @@ export function useBillTemplates() {
 export function useAllBillTemplates() {
   return useQuery({
     queryKey: [...queryKeys.billTemplates(), 'all'] as const,
-    queryFn: () => getRepository().listBillTemplates(true),
+    queryFn: async () => (await getRepository()).listBillTemplates(true),
   });
 }
 
@@ -79,8 +79,8 @@ export function useSetBillTemplateActive() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
-      getRepository().updateBillTemplate(id, { isActive }),
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) =>
+      (await getRepository()).updateBillTemplate(id, { isActive }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.all }),
   });
 }
@@ -90,7 +90,7 @@ export function useCreateBillTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: NewBillTemplate) => getRepository().createBillTemplate(input),
+    mutationFn: async (input: NewBillTemplate) => (await getRepository()).createBillTemplate(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.all }),
   });
 }

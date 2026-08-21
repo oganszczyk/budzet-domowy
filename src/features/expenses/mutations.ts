@@ -43,8 +43,8 @@ export function useCreateCategory() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (name: string) =>
-      getRepository().createCategory({
+    mutationFn: async (name: string) =>
+      (await getRepository()).createCategory({
         name,
         usedBy: [MainType.SUBSCRIPTION, MainType.PURCHASE],
         iconKey: 'pricetag-outline',
@@ -59,7 +59,7 @@ export function useCreatePayment() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (input: NewPayment) => getRepository().createPayment(input),
+    mutationFn: async (input: NewPayment) => (await getRepository()).createPayment(input),
     onSuccess: invalidate,
   });
 }
@@ -69,8 +69,8 @@ export function useUpdatePayment() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: PaymentPatch }) =>
-      getRepository().updatePayment(id, patch),
+    mutationFn: async ({ id, patch }: { id: number; patch: PaymentPatch }) =>
+      (await getRepository()).updatePayment(id, patch),
     onSuccess: invalidate,
   });
 }
@@ -84,7 +84,8 @@ export function useMarkBillAsPaid() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) => getRepository().updatePayment(id, { paidDate: todayIso() }),
+    mutationFn: async (id: number) =>
+      (await getRepository()).updatePayment(id, { paidDate: todayIso() }),
     onSuccess: invalidate,
   });
 }
@@ -94,7 +95,7 @@ export function useMarkBillAsUnpaid() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) => getRepository().updatePayment(id, { paidDate: null }),
+    mutationFn: async (id: number) => (await getRepository()).updatePayment(id, { paidDate: null }),
     onSuccess: invalidate,
   });
 }
@@ -107,7 +108,7 @@ export function useDeletePayment() {
   const invalidate = useInvalidateExpenses();
 
   return useMutation({
-    mutationFn: (id: number) => getRepository().deletePayment(id),
+    mutationFn: async (id: number) => (await getRepository()).deletePayment(id),
     onSuccess: invalidate,
   });
 }

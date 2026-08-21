@@ -36,12 +36,41 @@ możliwy do zaliczenia dopiero po Etapie 1b.
 - [x] Dane demonstracyjne dla bieżącego i poprzedniego miesiąca (3.1)
 - [x] Testy scenariuszy T-01, T-02, T-03, T-04, T-15
 
-## Etap 1b — baza SQLite ⬜ (po ukończeniu ekranów)
+## Etap 1b — baza SQLite ✅ ZAKOŃCZONY
 
-- [ ] Utworzyć bazę SQLite, tabele, indeksy i pierwszą migrację
-- [ ] Podmienić repozytorium w `src/data/index.ts`
-- [ ] Dodać domyślne kategorie przy pierwszym uruchomieniu
-- [ ] Napisać testy zapisu/odczytu bazy oraz scenariusz T-16
+- [x] Utworzyć bazę SQLite, tabele, indeksy i pierwszą migrację
+- [x] Podmienić repozytorium w `src/data/index.ts`
+- [x] Dodać domyślne kategorie przy pierwszym uruchomieniu
+- [x] Napisać testy zapisu/odczytu bazy oraz scenariusz T-16
+
+Podmiana ograniczyła się do jednego pliku, tak jak zaplanowano — żaden ekran
+nie wymagał zmiany. Jedyna różnica techniczna: `getRepository()` zwraca teraz
+obietnicę, bo otwarcie bazy jest asynchroniczne.
+
+**Dwie implementacje, jeden zestaw testów.** `repository-contract.test.ts`
+uruchamia te same 16 asercji na wersji pamięciowej i na SQLite. Gdyby któraś
+reguła biznesowa działała tylko w jednej wersji, test by to wykrył.
+
+**SQL testujemy w Node.** Adapter `node-adapter.ts` podstawia wbudowany
+moduł `node:sqlite`, więc zapytania sprawdzamy w milisekundach zamiast
+dopiero po instalacji na telefonie. W aplikacji obowiązuje `expo-adapter.ts`.
+
+**BR-12 pilnowane na dwóch poziomach:** logika aplikacji pyta rejestru
+wygenerowanych rekordów, a baza dodatkowo ma indeksy unikalne z 7.5.
+
+Zasiew wg T-01: kategorie i domyślne rachunki cykliczne, ZERO płatności —
+dlatego po pierwszym uruchomieniu sumy wynoszą 0,00 zł. Telefon
+i ubezpieczenie powstają wyłączone, bo 5.2 opisuje je jako opcjonalne.
+
+Sprawdzone w działającej aplikacji:
+
+| Sprawdzenie                         | Wynik                                                                |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| T-01: pierwsze uruchomienie         | kategorie są, trzy karty pokazują 0,00 zł                            |
+| 5.2: automat z domyślnych szablonów | 5 aktywnych rachunków, wszystkie „Oczekuje na kwotę"                 |
+| Opcjonalne rachunki wyłączone       | Telefon i Ubezpieczenie poza listą, dostępne w „Rachunki cykliczne"  |
+| T-16: ponowne uruchomienie          | po przeładowaniu kwota 234,56 zł i status na miejscu, bez duplikatów |
+| Baza działa też w przeglądarce      | expo-sqlite przez WebAssembly, konfiguracja w metro.config.js        |
 
 ## Etap 2 — ekran główny ✅ ZAKOŃCZONY
 
