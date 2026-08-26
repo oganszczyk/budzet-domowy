@@ -1,0 +1,71 @@
+name: Zgłoszenie błędu
+description: Coś nie działa tak, jak powinno.
+labels: ['błąd']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dzięki za zgłoszenie. Im dokładniej opiszesz, co się stało, tym większa
+        szansa, że uda się to odtworzyć i naprawić.
+
+        **Nie wklejaj tu zrzutów z prawdziwymi kwotami ani nazwiskami** —
+        zgłoszenie jest widoczne publicznie. Zamaż je albo opisz słowami.
+
+  - type: textarea
+    id: co-sie-stalo
+    attributes:
+      label: Co się stało
+      description: Opisz zachowanie, które uznajesz za błędne.
+    validations:
+      required: true
+
+  - type: textarea
+    id: czego-oczekiwales
+    attributes:
+      label: Czego oczekiwałeś
+      description: Co powinno się wydarzyć zamiast tego?
+    validations:
+      required: true
+
+  - type: textarea
+    id: kroki
+    attributes:
+      label: Jak to powtórzyć
+      description: Kolejne kroki, od otwarcia aplikacji do momentu błędu.
+      placeholder: |
+        1. Otwieram ekran główny
+        2. Przechodzę do „Rachunki domowe"
+        3. Naciskam „Uzupełnij kwotę"
+        4. Widzę...
+    validations:
+      required: true
+
+  - type: input
+    id: wersja
+    attributes:
+      label: Wersja aplikacji
+      description: Widoczna w sklepie z aplikacjami albo w ustawieniach telefonu.
+      placeholder: '1.0.0'
+
+  - type: dropdown
+    id: gdzie
+    attributes:
+      label: Gdzie to występuje
+      options:
+        - Zbudowana aplikacja na telefonie (APK)
+        - Expo Go
+        - Wersja webowa (npm run web)
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Wersja Androida i model telefonu
+      placeholder: 'Android 15, Samsung Galaxy S23'
+
+  - type: textarea
+    id: dodatkowe
+    attributes:
+      label: Cokolwiek jeszcze
+      description: Zrzut ekranu, treść komunikatu, okoliczności. Opcjonalne.

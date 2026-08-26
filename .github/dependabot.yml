@@ -1,0 +1,48 @@
+# Automatyczne propozycje aktualizacji zależności.
+#
+# UWAGA, KTÓRA JEST TU NAJWAŻNIEJSZA:
+# Wersje pakietów Expo, React Native i React NIE są wybierane niezależnie —
+# narzuca je wersja SDK. Dependabot o tym nie wie i chętnie zaproponuje
+# nowszego Reacta albo `expo` w wersji 55, co po cichu zepsuje zgodność
+# z Expo Go i z resztą pakietów.
+#
+# Dlatego wszystkie pakiety zarządzane przez SDK są tu wykluczone.
+# Aktualizuje się je wyłącznie razem, jednym poleceniem:
+#
+#     npx expo install --check
+#
+# Dependabot pilnuje reszty: narzędzi deweloperskich i bibliotek spoza SDK.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'deps'
+    ignore:
+      # Wersje przypisane do SDK — patrz komentarz na górze pliku.
+      - dependency-name: 'expo'
+      - dependency-name: 'expo-*'
+      - dependency-name: '@expo/*'
+      - dependency-name: 'react'
+      - dependency-name: 'react-dom'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-native-*'
+      - dependency-name: 'jest-expo'
+      - dependency-name: '@types/react'
+      # Zmiany główne wymagają decyzji człowieka, nie automatu.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Same akcje w przepływach GitHuba też się starzeją.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'ci'

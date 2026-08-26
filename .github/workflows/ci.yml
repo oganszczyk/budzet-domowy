@@ -1,0 +1,56 @@
+# Kontrola jakości przy każdej zmianie.
+#
+# Ten sam komplet, który AGENTS.md każe uruchomić przed zamknięciem etapu —
+# tyle że wykonywany automatycznie, także wtedy, gdy ktoś o nim zapomni.
+#
+# `npm ci` zamiast `npm install`: instaluje dokładnie te wersje, które są
+# w package-lock.json, i przerywa, jeśli plik rozjechał się z package.json.
+# Dzięki temu awaria testu oznacza błąd w kodzie, a nie inną wersję biblioteki.
+
+name: Kontrola jakości
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Nowy push do tej samej gałęzi przerywa poprzedni przebieg — nie ma sensu
+# czekać na wynik dla kodu, który już został nadpisany.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sprawdzenie:
+    name: Typy, styl i testy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Przygotuj Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: Sprawdź typy
+        run: npm run typecheck
+
+      - name: Sprawdź styl kodu
+        run: npm run lint
+
+      - name: Uruchom testy
+        run: npm test -- --ci
+
+      # Testy jednostkowe nie wykryją błędu, który psuje samo budowanie —
+      # brakującego importu w ekranie albo złej ścieżki do zasobu.
+      # Eksport wersji webowej jest najtańszym sprawdzianem, że aplikacja
+      # w ogóle się składa.
+      - name: Sprawdź, czy aplikacja się buduje
+        run: npx expo export --platform web --output-dir .expo-smoke

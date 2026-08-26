@@ -1,0 +1,45 @@
+name: Propozycja zmiany
+description: Pomysł na nową funkcję albo ulepszenie istniejącej.
+labels: ['propozycja']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Zanim opiszesz rozwiązanie, opisz problem. Dobrze postawiony problem
+        często ma tańsze rozwiązanie niż to, które przychodzi do głowy pierwsze.
+
+        Warto też zajrzeć do [`docs/PLAN-DALSZY.md`](../blob/main/docs/PLAN-DALSZY.md) —
+        być może ten pomysł już tam czeka.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Jaki problem to rozwiązuje
+      description: Co dziś jest niewygodne, powolne albo niemożliwe?
+    validations:
+      required: true
+
+  - type: textarea
+    id: propozycja
+    attributes:
+      label: Propozycja
+      description: Jak wyobrażasz sobie działanie tej funkcji?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatywy
+    attributes:
+      label: Co jeszcze rozważałeś
+      description: Inne sposoby rozwiązania tego samego problemu. Opcjonalne.
+
+  - type: checkboxes
+    id: zasady
+    attributes:
+      label: Zgodność z zasadami projektu
+      description: |
+        Aplikacja ma kilka reguł, których nie łamiemy — opisane w
+        [`AGENTS.md`](../blob/main/AGENTS.md).
+      options:
+        - label: Ta propozycja nie wymaga wysyłania danych poza urządzenie, albo świadomie to zmienia i piszę o tym wyżej.
+        - label: Ta propozycja nie wymaga przechowywania kwot inaczej niż w groszach.

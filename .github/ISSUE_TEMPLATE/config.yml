@@ -1,0 +1,12 @@
+# Puste zgłoszenia wyłączone — szablony wymuszają podanie tego,
+# bez czego i tak trzeba by dopytywać.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Pytanie o działanie aplikacji
+    url: https://github.com/rurikaburi/dom-apka/discussions
+    about: Pytania i rozmowy o projekcie — zamiast zgłoszenia błędu.
+
+  - name: Problem bezpieczeństwa
+    url: https://github.com/rurikaburi/dom-apka/security/advisories/new
+    about: Zgłoszenia bezpieczeństwa przyjmujemy prywatnie, nie przez publiczne zgłoszenia.

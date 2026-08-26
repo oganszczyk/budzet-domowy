@@ -30,8 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files — wzorzec bez sekretów zostaje w repozytorium
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
