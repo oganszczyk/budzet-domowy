@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Pobierz kod
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Przygotuj Node.js
         uses: actions/setup-node@v5
