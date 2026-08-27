@@ -25,8 +25,8 @@ Najkrócej:
 ## Przygotowanie środowiska
 
 ```bash
-git clone https://github.com/rurikaburi/dom-apka.git
-cd dom-apka
+git clone https://github.com/oganszczyk/budzet-domowy.git
+cd budzet-domowy
 npm install
 npm start
 ```

@@ -44,5 +44,5 @@ fizycznym urządzeniu z Androidem.
   opisania.
 - Aplikacja nie ma mechanizmu aktualizacji — nowa wersja to nowy plik APK.
 
-[niewydane]: https://github.com/rurikaburi/dom-apka/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/rurikaburi/dom-apka/releases/tag/v1.0.0
+[niewydane]: https://github.com/oganszczyk/budzet-domowy/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/oganszczyk/budzet-domowy/releases/tag/v1.0.0
