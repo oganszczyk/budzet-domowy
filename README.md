@@ -7,16 +7,16 @@ na urządzeniu.
 
 Interfejs jest po polsku, kwoty i daty w formacie `pl-PL`.
 
-<!--
-  MIEJSCE NA ZRZUTY EKRANU.
-  Zrób 3–4 zdjęcia ekranu na telefonie, wrzuć do docs/zrzuty/ i odkomentuj:
+<p align="center">
+  <img src="docs/zrzuty/ekran-glowny.jpg" width="32%" alt="Ekran główny: wykres budżetu miesiąca z podziałem na rachunki, zakupy i pozostałą kwotę">
+  <img src="docs/zrzuty/rachunki.jpg" width="32%" alt="Rachunki domowe ze statusami: po terminie, opłacony, oczekuje na kwotę">
+  <img src="docs/zrzuty/subskrypcje.jpg" width="32%" alt="Lista subskrypcji z prognozowanym kosztem rocznym">
+</p>
 
-  <p align="center">
-    <img src="docs/zrzuty/ekran-glowny.png" width="30%" alt="Ekran główny z wykresem budżetu">
-    <img src="docs/zrzuty/rachunki.png"     width="30%" alt="Lista rachunków domowych">
-    <img src="docs/zrzuty/skan.png"         width="30%" alt="Skanowanie paragonu">
-  </p>
--->
+<p align="center">
+  <sub>Pozostałe ekrany: <a href="docs/zrzuty/historia.jpg">historia płatności</a> ·
+  <a href="docs/zrzuty/zakupy.jpg">zakupy z podziałem na podkategorie</a></sub>
+</p>
 
 ## Co potrafi
 
