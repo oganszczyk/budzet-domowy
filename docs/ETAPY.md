@@ -441,6 +441,63 @@ plik powstaje i zawiera dane (ekran pokazuje liczby rekordów), ale nie mamy
 dowodu z urządzenia, że da się z niego wrócić. Testy kontraktu i formatu
 pokrywają obie strony, więc ryzyko jest niskie — ale nie zerowe.
 
+## Publikacja na GitHubie — 27.08.2026
+
+Repozytorium publiczne: https://github.com/oganszczyk/budzet-domowy
+
+Wydanie `v1.0.0` z załączonym plikiem APK (156 MB) — trwały adres do
+pobrania, niezależny od wygasających odnośników z EAS.
+
+### Co jest ustawione
+
+- **Kontrola jakości** (`.github/workflows/ci.yml`): typy, lint, testy
+  i próba zbudowania wersji webowej przy każdym pushu i zgłoszeniu.
+- **Ochrona gałęzi `main`**: wymagane przejście kontroli, zakaz wymuszonego
+  przepchnięcia i skasowania. Właściciel może pchać wprost — GitHub zgłasza
+  wtedy „Bypassed rule violations", co jest oczekiwane.
+- **Szablony** zgłoszenia błędu, propozycji i propozycji zmian.
+- **Dependabot** z celowym pominięciem pakietów zarządzanych przez SDK.
+
+### Dependabot NIE rusza pakietów Expo
+
+Wersje `expo`, `react`, `react-native` i pokrewnych narzuca wersja SDK.
+Automat o tym nie wie i zaproponowałby aktualizacje psujące zgodność
+z Expo Go. Są wykluczone w `.github/dependabot.yml`; aktualizuje się je
+wyłącznie razem:
+
+```
+npx expo install --check
+```
+
+### Tożsamość w commitach
+
+Historia została przepisana na adres zastępczy GitHuba
+`321406981+oganszczyk@users.noreply.github.com`, żeby prywatny adres nie był
+publiczny. Konfiguracja lokalna repozytorium już to ustawia — **nie commituj
+z adresem prywatnym**.
+
+### Dwa błędy wykryte dopiero przez kontrolę jakości
+
+Oba przechodziły lokalnie i padały na czystej instalacji z `package-lock.json`:
+
+1. Brak `@types/node` w zależnościach, mimo że adapter bazy do testów
+   importuje `node:sqlite`.
+2. `"types": ["jest"]` w `tsconfig.json` ograniczało wczytywane deklaracje
+   wyłącznie do Jesta — typy Node trafiały do projektu bocznymi drzwiami,
+   przez zależności Jesta.
+
+Warto o tym pamiętać przy diagnozowaniu podobnych różnic: „u mnie działa"
+przy pakietach oznacza zwykle pozostałości po wcześniejszych instalacjach
+w `node_modules`.
+
+### Zgłoszony błąd do naprawy
+
+[#4](https://github.com/oganszczyk/budzet-domowy/issues/4) — formularz nowego
+wydatku ucina ostatnią cyfrę roku (`27.08.202`). Dane są poprawne, to obcięcie
+przy rysowaniu na Androidzie. Wcześniejsza poprawka (`flexShrink: 0`) nie
+wystarczyła. Nie odtwarza się w wersji webowej — wymaga sprawdzenia
+na urządzeniu.
+
 ## Odstępstwa od specyfikacji
 
 | Punkt specyfikacji | Zapis w dokumencie     | Co robimy                                   | Dlaczego                                                                                                                               |
