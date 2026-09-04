@@ -21,7 +21,14 @@ import type {
   Payment,
   Subscription,
 } from '@/domain/models';
-import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
+import {
+  monthRange,
+  monthSpan,
+  todayIso,
+  yearMonthKey,
+  yearMonthOf,
+  type YearMonth,
+} from '@/lib/date';
 
 import { buildDemoData } from './demo-data';
 import type {
@@ -418,6 +425,30 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     return this.incomes
       .filter((i) => i.month === key)
       .reduce((total, i) => total + i.amountGrosze, 0);
+  }
+
+  // --- Analiza (Etap 12) ---
+
+  async listPaymentsForRange(from: YearMonth, to: YearMonth): Promise<Payment[]> {
+    const { start, end } = monthSpan(from, to);
+
+    return this.payments
+      .filter((p) => p.effectiveDate >= start && p.effectiveDate <= end)
+      .map((p) => this.withComputedStatus(p))
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || a.id - b.id);
+  }
+
+  async listIncomesForRange(from: YearMonth, to: YearMonth): Promise<Income[]> {
+    // Dochód zna tylko miesiąc („RRRR-MM"), więc obcinamy daty skrajne
+    // do siedmiu znaków. To ten sam zapis, więc porównanie tekstowe
+    // jest jednocześnie porównaniem chronologicznym.
+    const { start, end } = monthSpan(from, to);
+    const firstKey = start.slice(0, 7);
+    const lastKey = end.slice(0, 7);
+
+    return this.incomes
+      .filter((i) => i.month >= firstKey && i.month <= lastKey)
+      .sort((a, b) => a.month.localeCompare(b.month) || a.id - b.id);
   }
 
   // --- Kopia zapasowa (Etap 10) ---

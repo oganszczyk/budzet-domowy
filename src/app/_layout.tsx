@@ -69,6 +69,10 @@ export default function RootLayout() {
             <Stack.Screen name="purchases/index" options={{ title: strings.purchases.title }} />
             <Stack.Screen name="backup" options={{ title: strings.backup.title }} />
             <Stack.Screen name="income" options={{ title: strings.income.title }} />
+            <Stack.Screen
+              name="analysis/report"
+              options={{ title: strings.analysis.reportTitle }}
+            />
           </Stack>
         </MonthProvider>
       </QueryClientProvider>

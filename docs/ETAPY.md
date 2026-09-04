@@ -220,7 +220,7 @@ na 11,97 zł zapisałby się jako 2,24 zł.
 ## Etap 8 — analiza jako placeholder ✅ ZAKOŃCZONY
 
 - [x] Dodać ekran z informacją o przyszłym module
-- [ ] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji
+- [x] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji — patrz Etap 12
 
 Ekran istnieje od Etapu 0 i celowo pozostaje pusty — 5.9 wymaga osobnej
 specyfikacji przed wdrożeniem wykresów.
@@ -497,6 +497,153 @@ wydatku ucina ostatnią cyfrę roku (`27.08.202`). Dane są poprawne, to obcięc
 przy rysowaniu na Androidzie. Wcześniejsza poprawka (`flexShrink: 0`) nie
 wystarczyła. Nie odtwarza się w wersji webowej — wymaga sprawdzenia
 na urządzeniu.
+
+## Etap 12 — analiza: propozycje i własne zestawienia ✅ ZAKOŃCZONY
+
+Rozszerzenie poza pierwotną specyfikację. 5.9 zostawiło ten ekran pusty
+„do czasu osobnej specyfikacji" i wymagało jedynie, żeby architektura miała
+miejsce „na filtrowanie analiz po miesiącu i kategorii". Zakres ustalił
+właściciel projektu 27.08.2026, potwierdził przed wdrożeniem; zbudowane
+04.09.2026.
+
+**UWAGA: ten etap wyszedł inaczej, niż zakładał `docs/PLAN-DALSZY.md`.**
+Plan z 21.08.2026 dzielił pracę na trzy etapy: 12 (porównanie miesiąc do
+miesiąca, bez wykresów), 13 (własne zestawienia), 14 (przebieg w czasie).
+Decyzje właściciela z 27.08 przestawiły ten podział — przebieg w czasie
+i kreator własnego zestawienia weszły od razu, a zapisywanie zostało
+odłożone. Numeracja etapów w `PLAN-DALSZY.md` jest więc nieaktualna;
+obowiązuje ta z tego pliku.
+
+- [x] `AnalysisSubject` — sześć rodzajów przedmiotu analizy (`src/domain/analysis.ts`)
+- [x] `listPaymentsForRange` / `listIncomesForRange` w obu implementacjach + 6 testów kontraktu
+- [x] Szereg miesięczny, podsumowanie i porównanie lat jako czyste funkcje + 17 testów
+- [x] Propozycje dobierane do danych + 14 testów reguł wyboru
+- [x] Wykres słupkowy (`src/ui/components/bar-chart.tsx`)
+- [x] Ekran „Analiza": trzy propozycje i jedno wejście do kreatora
+- [x] Ekran `/analysis/report`: wybór pozycji i zakresu, wynik na żywo
+
+### Cztery decyzje właściciela projektu (27.08.2026)
+
+| Pytanie                      | Decyzja                             |
+| ---------------------------- | ----------------------------------- |
+| Ile pozycji naraz            | jedna, porównywana w czasie         |
+| Jakie zakresy czasu          | rok do roku ORAZ własny od-do       |
+| Zapisywanie zestawień        | dopiero po sprawdzeniu na telefonie |
+| Propozycje stałe czy zmienne | dobierane do danych                 |
+
+Świadomie NIE ma przycisków „ostatnie 6 miesięcy" ani „ostatnie 12 miesięcy":
+własny zakres obejmuje oba, a każdy dodatkowy przycisk to kolejna rzecz do
+przeczytania na ekranie, który ma być czysty.
+
+### „Gaz" nie jest kategorią — dlatego powstał AnalysisSubject
+
+Gaz, Prąd i Woda należą do JEDNEJ kategorii „Rachunki domowe" (BR-02 wymaga
+podkategorii wyłącznie dla zakupów), a rozróżnia je `billTemplateId`. Analiza
+filtrująca po samym `categoryId` nie umiałaby odpowiedzieć na pytanie
+„ile płacę za gaz" — czyli na pytanie, od którego ten ekran się zaczął.
+
+`AnalysisSubject` to typ rozłączny mówiący, PO KTÓREJ KOLUMNIE filtrujemy:
+wszystkie wydatki, kategoria główna, rachunek cykliczny, subskrypcja,
+podkategoria albo dochody.
+
+### Repozytorium oddaje surowe rekordy, nie gotowe sumy
+
+Kusiło dołożyć `getMonthlySeries(zakres, przedmiot)` i policzyć sumy w SQL.
+Odrzucone: przedmiotów analizy jest sześć rodzajów, więc zapytanie sklejałoby
+warunek `WHERE` z typu przedmiotu — reguła „co wchodzi do zestawienia"
+wylądowałaby w tekście SQL i nie dałoby się jej sprawdzić testem bez bazy.
+
+Przy skali domowego budżetu (kilkaset rekordów na rok) przeniesienie płatności
+do pamięci kosztuje tyle co nic, a cała matematyka zostaje czystą funkcją.
+Bez zmiany schematu, więc bez migracji.
+
+### Trzy reguły, w których łatwo o ciche kłamstwo
+
+1. **Średnia dzieli przez miesiące Z DANYMI, nie przez długość zakresu.**
+   Trzy rachunki za gaz w zakresie sześciomiesięcznym podzielone przez sześć
+   dają liczbę o połowę za niską — a użytkownik czyta ją jako „tyle płacę
+   miesięcznie". Miesiąc, w którym rachunku nie było, nie jest miesiącem,
+   w którym rachunek wyniósł zero.
+
+2. **Rok do roku porównuje tyle samo miesięcy po obu stronach.** W sierpniu
+   bieżący rok ma osiem miesięcy, a poprzedni dwanaście. Zestawienie wprost
+   pokazałoby spadek o jedną trzecią w każdej kategorii — nieprawdę, i to
+   nieprawdę wyglądającą na dobrą wiadomość.
+
+3. **Zakupy porównujemy do ostatniego ZAMKNIĘTEGO miesiąca.** Rachunek zna
+   swoją kwotę w chwili powstania, więc trwający miesiąc jest dla niego pełny.
+   Zakupy zbierają się przez cały miesiąc, więc porównanie trwającego miesiąca
+   ze średnią zawsze wychodziłoby „taniej niż zwykle" — fałszywa dobra
+   wiadomość, pokazywana codziennie.
+
+Dodatkowo miesiąc PUSTY jest odróżniony od miesiąca ZEROWEGO: rachunek bez
+wpisanej kwoty (BR-05) nie wchodzi do sumy, ale jest liczony osobno i ekran
+mówi wprost, ile takich rekordów siedzi w zakresie.
+
+### Propozycja musi kosztować, nie tylko procentowo drgnąć
+
+Kandydat trafia na ekran, gdy przekroczy OBA progi naraz: 20% odchylenia
+od własnej średniej i 20 zł różnicy. Sam procent zgłaszałby kawę, która
+podrożała z 8 na 12 zł. Sama złotówka zgłaszałaby czynsz, który drgnął o 30 zł
+na 2 500 zł. Kolejność propozycji ustala ZŁOTÓWKA, nie procent — bo to
+złotówki wychodzą z portfela.
+
+Propozycji zapasowych jest cztery, a miejsc trzy. Nadmiar jest celowy:
+„największy rachunek" odpada przy pustej bazie, a ekran i tak musi się zapełnić.
+
+### Dwa błędy znalezione dopiero na działających danych
+
+Testy jednostkowe przechodziły; oba wyszły przy klikaniu po ekranie.
+
+1. **Podsumowanie liczyło się z innego zakresu niż wykres.** W trybie „rok do
+   roku" pobieramy oba pełne lata, a pokazujemy tylko miesiące wchodzące do
+   porównania. Podsumowanie liczone z całości podawało „najtaniej: listopad" —
+   miesiąc nieobecny ani na wykresie, ani na liście pod nim. Poprawka: liczymy
+   z tego, co widać.
+
+2. **Wykres kulił się do lewej połowy karty.** Szerokość słupka liczyliśmy
+   z `onLayout`, a to zdarzenie nie zawsze dociera (po odświeżeniu kodu w locie
+   nie dociera nigdy) — stan zostawał na zerze i sześć słupków schodziło do
+   minimalnych 22 pikseli. Poprawka: nie mierzymy nic. Kolumny mają `flex: 1`
+   i `minWidth`, zawartość przewijanego obszaru `flexGrow: 1`; szerokość liczy
+   silnik układu. Mało słupków — dzielą całą szerokość; dużo — wykres przewija
+   się w bok.
+
+### Sprawdzone na działających danych (wersja webowa, 04.09.2026)
+
+Dziewięć zakupów rozrzuconych po miesiącach od lipca 2025 do sierpnia 2026.
+
+| Sprawdzenie                         | Wynik                                                            |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| Pusta baza                          | trzy propozycje zapasowe, ekran nie jest pusty                   |
+| Propozycja dobrana do danych        | „Jedzenie — Lipiec 2026: o 20% taniej niż zwykle"                |
+| Odniesienie dla zakupów             | lipiec (zamknięty), nie sierpień (trwający)                      |
+| Kliknięcie propozycji               | otwiera kreator z wypełnioną pozycją i zakresem                  |
+| Zakres własny III–VIII 2026         | suma 3 825,00 zł, średnia 637,50 zł, najdrożej sierpień          |
+| Rok do roku                         | 4 475,00 zł kontra 505,00 zł, „pierwsze 8 miesięcy każdego roku" |
+| Wysokości słupków                   | proporcjonalne (480 zł → 77 px przy 930 zł → 150 px)             |
+| Sześć słupków na telefonie (375 px) | 45 px szerokości, wypełniają kartę                               |
+| Szesnaście słupków                  | 22 px, wykres przewija się w bok (480 px treści na 309 px)       |
+| Odwrócony zakres                    | niemożliwy — kraniec ciągnie drugi za sobą                       |
+| Rachunki bez danych                 | komunikat zamiast pustego wykresu                                |
+
+### Czego Etap 12 NIE robi
+
+Nie zapisuje zestawień. Zbudowane zestawienie znika po wyjściu z ekranu.
+To decyzja świadoma: najpierw sprawdzamy na telefonie, czy takie zestawienia
+są w ogóle użyteczne, a dopiero potem dokładamy tabelę, migrację schematu
+do wersji 3 i objęcie kopią zapasową (format pliku wersja 3).
+
+**Do sprawdzenia na fizycznym telefonie:** wersja webowa potwierdza logikę
+i układ, ale przewijanie wykresu w bok wewnątrz przewijanego ekranu to
+dokładnie ten rodzaj rzeczy, który na Androidzie potrafi zachować się inaczej.
+
+## Etap 13 — zapisywanie własnych zestawień 🔜 DO ZROBIENIA
+
+- [ ] Tabela `saved_report` i migracja schematu do wersji 3
+- [ ] Nazwa zestawienia i zapis z ekranu kreatora
+- [ ] Zapisane zestawienia na ekranie „Analiza", pod propozycjami
+- [ ] Objęcie kopią zapasową (format pliku wersja 3)
 
 ## Odstępstwa od specyfikacji
 
