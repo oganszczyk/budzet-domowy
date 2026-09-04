@@ -18,7 +18,14 @@ import type {
   Payment,
   Subscription,
 } from '@/domain/models';
-import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
+import {
+  monthRange,
+  monthSpan,
+  todayIso,
+  yearMonthKey,
+  yearMonthOf,
+  type YearMonth,
+} from '@/lib/date';
 
 import type {
   BillAmountHistoryEntry,
@@ -707,6 +714,38 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       [yearMonthKey(month)]
     );
     return row?.total ?? 0;
+  }
+
+  // --- Analiza (Etap 12) ---
+
+  async listPaymentsForRange(from: YearMonth, to: YearMonth): Promise<Payment[]> {
+    const { start, end } = monthSpan(from, to);
+
+    // Kolejność od najstarszej płatności, odwrotnie niż w historii (5.7).
+    // Zestawienie czyta się od lewej do prawej wzdłuż osi czasu, więc dane
+    // przychodzą już w kolejności, w jakiej trafią na wykres.
+    const rows = await this.db.all<PaymentRow>(
+      `SELECT ${PAYMENT_COLUMNS} FROM payment
+       WHERE effectiveDate BETWEEN ? AND ?
+       ORDER BY effectiveDate ASC, id ASC`,
+      [start, end]
+    );
+    return rows.map((row) => this.toPayment(row));
+  }
+
+  async listIncomesForRange(from: YearMonth, to: YearMonth): Promise<Income[]> {
+    // Kolumna `month` trzyma „RRRR-MM", czyli pierwsze siedem znaków daty ISO.
+    // Obcięcie krańców zakresu do tej samej długości pozwala porównać je
+    // wprost, bez żadnej konwersji po stronie SQL.
+    const { start, end } = monthSpan(from, to);
+
+    const rows = await this.db.all<IncomeRow>(
+      `SELECT ${INCOME_COLUMNS} FROM income
+       WHERE month BETWEEN ? AND ?
+       ORDER BY month ASC, id ASC`,
+      [start.slice(0, 7), end.slice(0, 7)]
+    );
+    return rows.map((row) => this.toIncome(row));
   }
 
   // --- Kopia zapasowa (Etap 10) ---
