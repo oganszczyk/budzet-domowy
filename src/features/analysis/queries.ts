@@ -11,12 +11,13 @@
  * dodania zakupu aż do restartu aplikacji (AC 5.1).
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { strings } from '@/constants/strings';
 import { getRepository } from '@/data';
-import type { AnalysisSubject } from '@/domain/analysis';
+import type { NewSavedReport } from '@/data/repository';
+import { AnalysisRangeMode, type AnalysisSubject, type SavedReport } from '@/domain/analysis';
 import { useAllBillTemplates } from '@/features/bills/queries';
 import { useCategories } from '@/features/expenses/queries';
 import { useSubscriptionList } from '@/features/subscriptions/queries';
@@ -148,3 +149,60 @@ export function useAnalysisSeries(
 
 /** Nazwy pozycji, gdy nie zdążyły się jeszcze wczytać. */
 export { EMPTY_DICTIONARIES };
+
+// --- Zapisane zestawienia (Etap 13) ---
+
+/** Lista zestawień zapisanych przez użytkownika. */
+export function useSavedReports() {
+  return useQuery({
+    queryKey: savedReportsKey,
+    queryFn: async () => (await getRepository()).listSavedReports(),
+  });
+}
+
+const savedReportsKey = ['expenses', 'savedReports'] as const;
+
+/**
+ * Zapis nowego zestawienia.
+ *
+ * Unieważniamy WYŁĄCZNIE listę zestawień, a nie całą gałąź `['expenses']`.
+ * Zapisanie zestawienia nie zmienia ani jednej kwoty, więc przeliczanie sum,
+ * historii i wykresów byłoby pracą bez powodu — i to wykonaną dokładnie
+ * w chwili, gdy użytkownik patrzy na wynik.
+ */
+export function useCreateSavedReport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: NewSavedReport) => (await getRepository()).createSavedReport(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: savedReportsKey }),
+  });
+}
+
+export function useDeleteSavedReport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: number) => (await getRepository()).deleteSavedReport(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: savedReportsKey }),
+  });
+}
+
+/**
+ * Zamienia zapisane zestawienie na zakres miesięcy do pokazania DZIŚ.
+ *
+ * Tu materializuje się decyzja o przesuwającym się oknie: zestawienie nie zna
+ * dat, zna długość. Konkretne miesiące wyliczamy dopiero przy otwarciu,
+ * względem bieżącego miesiąca urządzenia.
+ */
+export function rangeForSavedReport(
+  report: Pick<SavedReport, 'rangeMode' | 'windowMonths'>,
+  today: YearMonth
+): { from: YearMonth; to: YearMonth } {
+  if (report.rangeMode === AnalysisRangeMode.YEAR_OVER_YEAR) {
+    return { from: { year: today.year - 1, month: 1 }, to: { year: today.year, month: 12 } };
+  }
+
+  const windowMonths = report.windowMonths ?? PROPOSAL_LOOKBACK_MONTHS;
+  return { from: addMonths(today, -(windowMonths - 1)), to: today };
+}

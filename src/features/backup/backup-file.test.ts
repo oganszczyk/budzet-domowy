@@ -104,6 +104,18 @@ function buildSnapshot(): BackupSnapshot {
         updatedAt: CREATED_AT,
       },
     ],
+    savedReports: [
+      {
+        id: 4,
+        name: 'Gaz w czasie',
+        subjectKey: 'BILL_TEMPLATE:3',
+        rangeMode: 'CUSTOM',
+        windowMonths: 6,
+        sortOrder: 1,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      },
+    ],
   };
 }
 
@@ -148,6 +160,7 @@ describe('plik kopii zapasowej', () => {
         subscriptions: [],
         generatedRecords: [],
         incomes: [],
+        savedReports: [],
       };
 
       const result = roundTrip(empty);
@@ -183,6 +196,16 @@ describe('plik kopii zapasowej', () => {
       const raw = JSON.parse(serializeBackup(buildSnapshot(), CREATED_AT));
       raw.formatVersion = 1;
       delete raw.snapshot.incomes;
+      // Zestawienia powstały dopiero w wersji 3 formatu.
+      delete raw.snapshot.savedReports;
+      return JSON.stringify(raw);
+    }
+
+    /** Kopia z Etapu 11 — ma już dochody, nie ma jeszcze zestawień. */
+    function version2File(): string {
+      const raw = JSON.parse(serializeBackup(buildSnapshot(), CREATED_AT));
+      raw.formatVersion = 2;
+      delete raw.snapshot.savedReports;
       return JSON.stringify(raw);
     }
 
@@ -206,6 +229,74 @@ describe('plik kopii zapasowej', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.file.snapshot.payments).toEqual(buildSnapshot().payments);
+    });
+
+    it('traktuje brak zestawień w starszej kopii jako pustą listę', () => {
+      // Etap 13 podniósł format do wersji 3. Kopia zrobiona wczoraj, w wersji 2,
+      // nie ma pola `savedReports` — i to nie jest uszkodzenie. Gdyby było,
+      // wydanie tego etapu unieważniłoby wszystkie dotychczasowe kopie
+      // użytkownika, czyli dokładnie wtedy, gdy są najbardziej potrzebne.
+      const result = parseBackup(version2File());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.file.snapshot.savedReports).toEqual([]);
+      // Dochody z wersji 2 mają przy tym przetrwać w komplecie.
+      expect(result.file.snapshot.incomes).toEqual(buildSnapshot().incomes);
+    });
+  });
+
+  describe('zapisane zestawienia (Etap 13)', () => {
+    it('przechodzą zapis i odczyt bez zmiany', () => {
+      const snapshot = buildSnapshot();
+      const result = roundTrip(snapshot);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.file.snapshot.savedReports).toEqual(snapshot.savedReports);
+    });
+
+    it('odrzuca zestawienie z nieznanym trybem zakresu', () => {
+      const snapshot = buildSnapshot();
+      const damaged = {
+        ...snapshot,
+        savedReports: [{ ...snapshot.savedReports[0], rangeMode: 'CO_TO_JEST' }],
+      };
+
+      const result = parseBackup(serializeBackup(damaged as unknown as BackupSnapshot, CREATED_AT));
+
+      expect(result).toEqual({ ok: false, reason: 'DAMAGED' });
+    });
+
+    it('odrzuca okno o bezsensownej długości', () => {
+      // Zero miesięcy dałoby zakres, z którego nie da się zbudować wykresu.
+      const snapshot = buildSnapshot();
+      const damaged = {
+        ...snapshot,
+        savedReports: [{ ...snapshot.savedReports[0], windowMonths: 0 }],
+      };
+
+      const result = parseBackup(serializeBackup(damaged, CREATED_AT));
+
+      expect(result).toEqual({ ok: false, reason: 'DAMAGED' });
+    });
+
+    it('przyjmuje puste okno dla trybu roku do roku', () => {
+      const snapshot = buildSnapshot();
+      const yearOverYear = {
+        ...snapshot,
+        savedReports: [
+          {
+            ...snapshot.savedReports[0],
+            rangeMode: 'YEAR_OVER_YEAR' as const,
+            windowMonths: null,
+          },
+        ],
+      };
+
+      const result = parseBackup(serializeBackup(yearOverYear, CREATED_AT));
+
+      expect(result.ok).toBe(true);
     });
   });
 

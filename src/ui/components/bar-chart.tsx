@@ -60,8 +60,19 @@ type BarChartProps = {
 /** Wysokość obszaru rysowania. Podpisy osi leżą pod nim. */
 const PLOT_HEIGHT = 150;
 
-/** Najwęższy słupek, jaki jeszcze da się objąć wzrokiem. */
-const MIN_BAR_WIDTH = 22;
+/**
+ * Najwęższy słupek — szerokość dyktuje NAJSZERSZY PODPIS, nie sam słupek.
+ *
+ * Sprawdzenie na telefonie (04.09.2026) pokazało wielokropki pod osią.
+ * Przy 22 px winowajcą nie były nazwy miesięcy, tylko rok: „2026" potrzebuje
+ * 26,7 px. Trzyliterowe skróty mieściły się, ale „mar" (21,3 px) i „maj"
+ * (20,0 px) miały zapas poniżej jednego piksela — dość w przeglądarce,
+ * za mało na Androidzie z inną czcionką systemową.
+ *
+ * 32 px daje najszerszemu podpisowi około pięciu pikseli zapasu. Kosztuje to
+ * tylko tyle, że mniej słupków widać naraz — wykres i tak się przewija.
+ */
+const MIN_BAR_WIDTH = 32;
 
 const BAR_GAP = spacing.sm;
 

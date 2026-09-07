@@ -181,6 +181,7 @@ function CountsList({ counts }: { counts: BackupCounts }) {
     [strings.backup.countsSubscriptions, counts.subscriptions],
     [strings.backup.countsCategories, counts.categories],
     [strings.backup.countsIncomes, counts.incomes],
+    [strings.backup.countsSavedReports, counts.savedReports],
   ];
 
   return (

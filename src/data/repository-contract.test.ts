@@ -6,6 +6,7 @@
  * w jednej wersji, ten plik by to wychwycił.
  */
 
+import { AnalysisRangeMode } from '@/domain/analysis';
 import { MainType, PaymentSource } from '@/domain/enums';
 import type { Payment } from '@/domain/models';
 import { addMonths, currentYearMonth, dueDateFor, todayIso, yearMonthKey } from '@/lib/date';
@@ -505,6 +506,7 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
           subscriptions: [],
           generatedRecords: [],
           incomes: [],
+          savedReports: [],
         });
 
         expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(0);
@@ -610,6 +612,88 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
         expect(names).toContain('Ola');
         expect(names).toContain('Marek');
         expect(names).not.toContain('Poza zakresem');
+      });
+    });
+
+    describe('Zapisane zestawienia (Etap 13)', () => {
+      const GAZ = {
+        name: 'Gaz w czasie',
+        subjectKey: 'BILL_TEMPLATE:3',
+        rangeMode: AnalysisRangeMode.CUSTOM,
+        windowMonths: 6,
+      };
+
+      it('zapisane zestawienie wraca z listy w całości', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        const found = (await repo.listSavedReports()).find((r) => r.id === created.id);
+
+        expect(found).toMatchObject(GAZ);
+      });
+
+      it('nowe zestawienia trafiają na koniec listy', async () => {
+        const repo = await createRepository();
+        const first = await repo.createSavedReport({ ...GAZ, name: 'Pierwsze' });
+        const second = await repo.createSavedReport({ ...GAZ, name: 'Drugie' });
+
+        expect(second.sortOrder).toBeGreaterThan(first.sortOrder);
+        const order = (await repo.listSavedReports()).map((r) => r.id);
+        expect(order.indexOf(second.id)).toBeGreaterThan(order.indexOf(first.id));
+      });
+
+      it('tryb roku do roku nie ma długości okna', async () => {
+        const repo = await createRepository();
+
+        const created = await repo.createSavedReport({
+          name: 'Rok do roku',
+          subjectKey: 'ALL_EXPENSES',
+          rangeMode: AnalysisRangeMode.YEAR_OVER_YEAR,
+          windowMonths: null,
+        });
+
+        expect(created.windowMonths).toBeNull();
+      });
+
+      it('zmiana nazwy nie rusza reszty zestawienia', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        const renamed = await repo.updateSavedReport(created.id, { name: 'Gaz i ogrzewanie' });
+
+        expect(renamed.name).toBe('Gaz i ogrzewanie');
+        expect(renamed.subjectKey).toBe(GAZ.subjectKey);
+        expect(renamed.windowMonths).toBe(6);
+      });
+
+      it('usunięte zestawienie znika z listy', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        await repo.deleteSavedReport(created.id);
+
+        expect((await repo.listSavedReports()).map((r) => r.id)).not.toContain(created.id);
+      });
+
+      it('zestawienia wchodzą do kopii zapasowej i wracają z niej', async () => {
+        const repo = await createRepository();
+        await repo.createSavedReport(GAZ);
+
+        // Zestawienie to praca użytkownika tak samo jak wpisany wydatek —
+        // po zmianie telefonu musiałby wyklikać je od nowa.
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        expect((await repo.listSavedReports()).map((r) => r.name)).toContain('Gaz w czasie');
+      });
+
+      it('odtworzenie kopii bez zestawień czyści listę', async () => {
+        const repo = await createRepository();
+        await repo.createSavedReport(GAZ);
+
+        const snapshot = await repo.exportSnapshot();
+        await repo.importSnapshot({ ...snapshot, savedReports: [] });
+
+        expect(await repo.listSavedReports()).toEqual([]);
       });
     });
   });
