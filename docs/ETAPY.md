@@ -423,23 +423,20 @@ Migracja schematu 1 → 2 przeszła na prawdziwym urządzeniu z prawdziwymi
 danymi, nie tylko w teście. To domyka zasadę 5 z `AGENTS.md` w praktyce:
 aktualizacja aplikacji nie kasuje bazy.
 
-### Niesprawdzone na urządzeniu: ODTWARZANIE kopii
+### ODTWARZANIE kopii — potwierdzone na urządzeniu 04.09.2026
 
-Zapisywanie kopii jest potwierdzone, odtwarzanie NIE. To jedyna funkcja
-w aplikacji, której nie da się sprawdzić bez ryzyka — odtworzenie zastępuje
-całą zawartość, więc nieudana próba kosztuje dane.
-
-Zanim ktokolwiek uzna kopię zapasową za działającą, trzeba sprawdzić
-odtwarzanie. Bezpieczna kolejność:
+Przez dwa tygodnie była to jedyna funkcja aplikacji bez dowodu z urządzenia,
+i jedyna, której nieudana próba kosztuje dane — odtworzenie zastępuje całą
+zawartość. Sprawdzone przy okazji instalacji builda z Etapem 12, w bezpiecznej
+kolejności:
 
 1. zapisać świeżą kopię i wysłać plik poza telefon,
 2. dopiero wtedy uruchomić odtwarzanie ze wskazaniem tego pliku,
 3. sprawdzić, czy sumy i historia wróciły w komplecie.
 
-Do tego czasu kopia zapasowa jest potwierdzona TYLKO w połowie: wiemy, że
-plik powstaje i zawiera dane (ekran pokazuje liczby rekordów), ale nie mamy
-dowodu z urządzenia, że da się z niego wrócić. Testy kontraktu i formatu
-pokrywają obie strony, więc ryzyko jest niskie — ale nie zerowe.
+**Działa.** Ta kolejność zostaje tu opisana nie jako zaległość, tylko jako
+instrukcja na przyszłość: odtwarzanie bez wcześniejszej kopii poza telefonem
+jest ryzykowne niezależnie od tego, ile razy zadziałało wcześniej.
 
 ## Publikacja na GitHubie — 27.08.2026
 
@@ -634,12 +631,58 @@ To decyzja świadoma: najpierw sprawdzamy na telefonie, czy takie zestawienia
 są w ogóle użyteczne, a dopiero potem dokładamy tabelę, migrację schematu
 do wersji 3 i objęcie kopią zapasową (format pliku wersja 3).
 
-**Do sprawdzenia na fizycznym telefonie:** wersja webowa potwierdza logikę
-i układ, ale przewijanie wykresu w bok wewnątrz przewijanego ekranu to
-dokładnie ten rodzaj rzeczy, który na Androidzie potrafi zachować się inaczej.
+### Sprawdzone na fizycznym telefonie — 04.09.2026
+
+Build `preview` z commita `3207260`, zainstalowany na wierzchu poprzedniej
+wersji, ten sam klucz podpisujący `Q8cjR6jgTR`.
+
+| Co                                         | Wynik                                |
+| ------------------------------------------ | ------------------------------------ |
+| Dane z poprzedniej wersji po aktualizacji  | ✅ na miejscu                        |
+| Zapisanie kopii zapasowej i wysłanie pliku | ✅ działa                            |
+| Ekran analizy — trzy propozycje            | ✅ działa                            |
+| Wykres i przewijanie w bok w trybie roku   | ✅ działa                            |
+| Odtworzenie kopii zapasowej                | ✅ działa (patrz Etap 10)            |
+| Podpisy pod słupkami                       | ❌ ucinane do kropek — opisane niżej |
+
+Obawa o poziome przewijanie wewnątrz pionowo przewijanego ekranu okazała się
+nieuzasadniona — na Androidzie działa.
+
+### Usterka do naprawy: ucinane podpisy osi
+
+Zgłoszenie właściciela projektu: pod słupkami „wszędzie kropki".
+
+Przyczyna NIE jest tam, gdzie się wydaje. Nazwy miesięcy są już trzyliterowe
+(`MONTH_SHORT_NAMES`); nie mieści się **rok** pod pierwszym słupkiem.
+Zmierzone w czcionce podpisów przy `MIN_BAR_WIDTH` = 22 px:
+
+| Podpis | Szerokość | Mieści się w 22 px |
+| ------ | --------- | ------------------ |
+| `lis`  | 11,4 px   | tak, z zapasem     |
+| `maj`  | 20,0 px   | ledwo              |
+| `mar`  | 21,3 px   | 0,7 px zapasu      |
+| `2026` | 26,7 px   | **nie**            |
+
+Trzyliterowe miesiące mieszczą się w przeglądarce, ale `mar` i `maj` mają
+zapas mniejszy niż jeden piksel — na Androidzie, z inną czcionką systemową,
+też się urywają. Stąd wrażenie, że kropki są wszędzie, choć zaczyna się
+od samego roku.
+
+Naprawa to jedna stała: `MIN_BAR_WIDTH` z 22 na około 32 px, czyli tyle,
+żeby najszerszy podpis mieścił się z zapasem. Kosztuje to tylko tyle, że
+mniej słupków widać naraz — wykres i tak się przewija.
+
+To NIE jest ta sama usterka co zgłoszenie
+[#4](https://github.com/oganszczyk/budzet-domowy/issues/4). Tam tekst gubi
+ostatni znak przy rysowaniu mimo dostępnego miejsca; tutaj miejsca po prostu
+nie ma i system uczciwie sygnalizuje to wielokropkiem.
 
 ## Etap 13 — zapisywanie własnych zestawień 🔜 DO ZROBIENIA
 
+- [ ] Poszerzyć `MIN_BAR_WIDTH` w `bar-chart.tsx` (usterka ucinanych podpisów)
+- [ ] Dołożyć kolumnę `uuid` — właściciel potwierdził, że pojawi się drugi
+      telefon (iPhone). Przy tej migracji to kilka linijek; po roku zbierania
+      danych dotyka już także formatu kopii zapasowej.
 - [ ] Tabela `saved_report` i migracja schematu do wersji 3
 - [ ] Nazwa zestawienia i zapis z ekranu kreatora
 - [ ] Zapisane zestawienia na ekranie „Analiza", pod propozycjami
