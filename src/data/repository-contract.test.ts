@@ -699,6 +699,151 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
     });
 
     /**
+     * Etap 14c: kolejka rekordów do wysłania.
+     *
+     * Znowu kontrakt, a nie test jednej implementacji — bo znowu obie robią
+     * to zupełnie inaczej. W wersji na SQLite kolejkę prowadzi kolumna
+     * `pendingSync` podnoszona wyzwalaczem; w pamięciowej — porównanie
+     * odcisku rekordu z zapamiętanym. Rozjazd tutaj znaczyłby, że wydatek
+     * nie dojeżdża na drugi telefon, a nikt się o tym nie dowie.
+     */
+    describe('Kolejka do wysłania (Etap 14c)', () => {
+      /** Opróżnia kolejkę, udając udaną wysyłkę wszystkiego. */
+      async function udajUdanaWysylke(repo: ExpensesRepository) {
+        const czekajace = await repo.listPendingChanges();
+
+        await repo.markSynced({
+          categories: czekajace.categories.map((c) => c.uuid),
+          billTemplates: czekajace.billTemplates.map((t) => ({
+            uuid: t.uuid,
+            updatedAt: t.updatedAt,
+          })),
+          subscriptions: czekajace.subscriptions.map((s) => ({
+            uuid: s.uuid,
+            updatedAt: s.updatedAt,
+          })),
+          payments: czekajace.payments.map((p) => ({ uuid: p.uuid, updatedAt: p.updatedAt })),
+          incomes: czekajace.incomes.map((i) => ({ uuid: i.uuid, updatedAt: i.updatedAt })),
+          deletedRecords: czekajace.deletedRecords.map((d) => ({
+            entityType: d.entityType,
+            uuid: d.uuid,
+          })),
+        });
+      }
+
+      it('nowy wydatek czeka na wysłanie', async () => {
+        const repo = await createRepository();
+        await udajUdanaWysylke(repo);
+
+        const payment = await addPurchase(repo, 12550);
+
+        const czekajace = await repo.listPendingChanges();
+        expect(czekajace.payments.map((p) => p.uuid)).toContain(payment.uuid);
+      });
+
+      it('po potwierdzeniu wysyłki kolejka jest pusta', async () => {
+        const repo = await createRepository();
+        await addPurchase(repo, 12550);
+
+        await udajUdanaWysylke(repo);
+
+        const czekajace = await repo.listPendingChanges();
+        expect(czekajace.payments).toEqual([]);
+        expect(czekajace.categories).toEqual([]);
+        expect(czekajace.deletedRecords).toEqual([]);
+      });
+
+      it('edycja wysłanego wydatku wraca do kolejki', async () => {
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+        await udajUdanaWysylke(repo);
+
+        await repo.updatePayment(payment.id, { amountGrosze: 9900 });
+
+        const czekajace = await repo.listPendingChanges();
+        expect(czekajace.payments.map((p) => p.uuid)).toEqual([payment.uuid]);
+      });
+
+      it('potwierdzenie NIEAKTUALNEJ postaci rekordu nie gasi kolejki', async () => {
+        // Najważniejszy test w tej grupie. Między odczytem rekordów a
+        // potwierdzeniem wysyłki mija czas — na słabym łączu kilkanaście
+        // sekund — i użytkownik może w tym czasie poprawić kwotę wydatku,
+        // który właśnie poleciał. Gdyby potwierdzenie działało po samym
+        // `uuid`, ta poprawka przepadłaby: rekord przestałby być oznaczony,
+        // więc nic by go już nie wysłało, a serwer zostałby ze starą kwotą.
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+        await udajUdanaWysylke(repo);
+
+        const poprawiony = await repo.updatePayment(payment.id, { amountGrosze: 9900 });
+
+        // Potwierdzenie niesie znacznik czasu SPRZED poprawki. Podajemy go
+        // wprost, a nie przez `payment.updatedAt`: utworzenie i poprawka
+        // potrafią zmieścić się w tej samej milisekundzie, a wtedy oba
+        // znaczniki byłyby identyczne i test nie sprawdzałby niczego.
+        await repo.markSynced({
+          categories: [],
+          billTemplates: [],
+          subscriptions: [],
+          payments: [{ uuid: payment.uuid, updatedAt: '2020-01-01T00:00:00.000Z' }],
+          incomes: [],
+          deletedRecords: [],
+        });
+
+        const czekajace = await repo.listPendingChanges();
+        expect(czekajace.payments.map((p) => p.uuid)).toEqual([poprawiony.uuid]);
+      });
+
+      it('skasowany wydatek czeka w kolejce jako osobna zmiana', async () => {
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+        await udajUdanaWysylke(repo);
+
+        await repo.deletePayment(payment.id);
+
+        const czekajace = await repo.listPendingChanges();
+        expect(czekajace.deletedRecords).toEqual([
+          expect.objectContaining({ entityType: 'PAYMENT', uuid: payment.uuid }),
+        ]);
+      });
+
+      it('wydatek w kolejce niesie trwały identyfikator swojej kategorii', async () => {
+        // To jest cały powód, dla którego odstąpiliśmy od przepisywania
+        // kluczy obcych na `uuid` w Etapie 14b: tłumaczenie ma się zdarzyć
+        // TUTAJ, jednym złączeniem, a nie w całej aplikacji.
+        const repo = await createRepository();
+        await udajUdanaWysylke(repo);
+
+        const payment = await addPurchase(repo, 12550);
+        const [category] = await repo.listCategories(MainType.PURCHASE);
+
+        const czekajace = await repo.listPendingChanges();
+        const wKolejce = czekajace.payments.find((p) => p.uuid === payment.uuid);
+
+        expect(wKolejce?.categoryUuid).toBe(category.uuid);
+        expect(wKolejce?.billTemplateUuid).toBeNull();
+        expect(wKolejce?.subscriptionUuid).toBeNull();
+      });
+
+      it('nowy dochód czeka na wysłanie i znika po potwierdzeniu', async () => {
+        const repo = await createRepository();
+        await udajUdanaWysylke(repo);
+
+        const income = await repo.createIncome({
+          personName: 'Ola',
+          amountGrosze: 620000,
+          month: '2026-09',
+        });
+
+        expect((await repo.listPendingChanges()).incomes.map((i) => i.uuid)).toEqual([income.uuid]);
+
+        await udajUdanaWysylke(repo);
+
+        expect((await repo.listPendingChanges()).incomes).toEqual([]);
+      });
+    });
+
+    /**
      * Etap 14b: trwałe identyfikatory i ślad po skasowanych.
      *
      * Te testy stoją w kontrakcie, a nie przy jednej implementacji, bo obie

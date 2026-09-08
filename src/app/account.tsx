@@ -13,6 +13,10 @@
  *
  * Ekran nie zna Supabase (8.1). Woła `useAuth()` i tłumaczy zwrócony powód
  * odmowy na polskie zdanie ze `strings.ts`.
+ *
+ * Etap 14c dokłada kartę wysyłki, widoczną wyłącznie po zalogowaniu.
+ * Ostrzeżenie u dołu zmieniło wtedy treść, a nie zniknęło: wysyłanie bez
+ * pobierania wygląda na całość, a nią nie jest.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +26,8 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-nati
 
 import { strings } from '@/constants/strings';
 import { useAuth, type AuthOutcome } from '@/features/auth/auth-context';
+import { usePendingSyncCount, usePushToCloud } from '@/features/sync/mutations';
+import { plural } from '@/lib/plural';
 import { Button } from '@/ui/components/button';
 import { Card } from '@/ui/components/card';
 import { Screen } from '@/ui/components/screen';
@@ -46,6 +52,7 @@ export default function AccountScreen() {
         {status === 'unavailable' && <UnavailableCard />}
         {status === 'signedOut' && <SignedOutCard onSignIn={signIn} onSignUp={signUp} />}
         {status === 'signedIn' && <SignedInCard email={email} onSignOut={signOut} />}
+        {status === 'signedIn' && <SyncCard />}
 
         {/*
           Ostrzeżenie stoi POZA kartami, więc widać je w każdym stanie —
@@ -249,6 +256,95 @@ function SignedInCard({ email, onSignOut }: SignedInCardProps) {
         loading={busy}
       />
     </Card>
+  );
+}
+
+/**
+ * Etap 14c: wysyłka do chmury.
+ *
+ * DLACZEGO OBOK PRZYCISKU STOI LICZBA
+ *
+ * Sam „Wyślij" jest ślepy w obie strony: przed naciśnięciem nie wiadomo,
+ * czy jest co wysyłać, a po naciśnięciu — czy cokolwiek się stało. Licznik
+ * odpowiada na oba pytania jedną liczbą, bez żadnego okna dialogowego.
+ *
+ * DLACZEGO NIEPOWODZENIE POKAZUJE, ILE ZDĄŻYŁO DOJECHAĆ
+ *
+ * Wysyłka przerwana w połowie zostawia część rekordów na serwerze i ta praca
+ * nie przepada. Komunikat „nie udało się" bez tej informacji kazałby myśleć,
+ * że wszystko trzeba zaczynać od zera — a przy słabym łączu zniechęciłby
+ * do kolejnych prób akurat wtedy, gdy są najbardziej potrzebne.
+ */
+function SyncCard() {
+  const pending = usePendingSyncCount();
+  const push = usePushToCloud();
+
+  const czeka = pending.data ?? 0;
+  const wynik = push.data;
+
+  return (
+    <Card style={styles.section}>
+      <View style={styles.signedInHeader}>
+        <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+        <Text style={styles.sectionTitle}>{strings.account.sync.title}</Text>
+      </View>
+
+      <Text style={styles.sectionDescription}>
+        {czeka === 0
+          ? strings.account.sync.upToDate
+          : `${czeka} ${plural(czeka, strings.account.sync.pending)}`}
+      </Text>
+
+      <Button
+        label={push.isPending ? strings.account.sync.working : strings.account.sync.button}
+        icon="cloud-upload-outline"
+        onPress={() => push.mutate()}
+        loading={push.isPending}
+        disabled={czeka === 0 && wynik === undefined}
+      />
+
+      <SyncResult outcome={wynik} />
+    </Card>
+  );
+}
+
+function SyncResult({ outcome }: { outcome: ReturnType<typeof usePushToCloud>['data'] }) {
+  if (!outcome) return null;
+
+  if (outcome.ok) {
+    const tresc =
+      outcome.sent === 0
+        ? strings.account.sync.nothingToSend
+        : strings.account.sync.sent(
+            outcome.sent,
+            plural(outcome.sent, strings.account.sync.records)
+          );
+
+    return (
+      <View style={[styles.feedback, styles.feedbackSuccess]}>
+        <Ionicons name="checkmark-circle-outline" size={18} color={colors.statusPaid} />
+        <Text style={[styles.feedbackText, styles.feedbackSuccessText]}>{tresc}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.feedback, styles.feedbackError]}>
+      <Ionicons name="close-circle-outline" size={18} color={colors.statusOverdue} />
+      <View style={styles.feedbackTexts}>
+        <Text style={[styles.feedbackText, styles.feedbackErrorText]}>
+          {strings.account.sync.error[outcome.reason]}
+        </Text>
+        {outcome.sent > 0 && (
+          <Text style={styles.feedbackDetail}>
+            {strings.account.sync.partial(
+              outcome.sent,
+              plural(outcome.sent, strings.account.sync.records)
+            )}
+          </Text>
+        )}
+      </View>
+    </View>
   );
 }
 
