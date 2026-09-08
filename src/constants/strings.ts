@@ -457,18 +457,22 @@ export const strings = {
     loading: 'Sprawdzam konto...',
 
     /**
-     * To zdanie jest najważniejsze na całym ekranie i zmienia się wraz z tym,
+     * To zdanie jest najważniejsze na całym ekranie i zmieniało się wraz z tym,
      * co aplikacja NAPRAWDĘ potrafi.
      *
-     * Etap 14a: nie wysyłała ani nie pobierała. Etap 14c: wysyła, ale nie
-     * pobiera — i właśnie ta połowa jest niebezpieczna, bo wygląda na całość.
-     * Człowiek, który przeczyta „wysłano 340 wydatków", uzna, że drugi telefon
-     * je zobaczy, a nie zobaczy. Uzna też, że dane są bezpieczne, i przestanie
-     * robić kopie zapasowe — a kopia nadal jest jedynym sposobem, żeby te dane
-     * ODZYSKAĆ. Wysłane nie znaczy możliwe do odzyskania.
+     * Etap 14a: nie wysyłała ani nie pobierała. Etap 14c: wysyłała, ale nie
+     * pobierała. Etap 14d: umie jedno i drugie — i dopiero teraz wolno
+     * powiedzieć „synchronizacja działa".
+     *
+     * ZDANIE ZOSTAJE, TYLKO ZMIENIA TREŚĆ. Kusiło, żeby je wreszcie usunąć,
+     * skoro wszystko działa. Ale synchronizacja przynosi ze sobą ryzyko,
+     * którego wcześniej nie było: kasowanie też się rozchodzi. Pomyłka na
+     * jednym telefonie znika ze wszystkich, a chmura nie pamięta, co było
+     * przedtem. Kopia zapasowa przestała być jedynym sposobem na PRZENIESIENIE
+     * danych, ale nadal jest jedynym sposobem, żeby COFNĄĆ zmianę.
      */
-    notSyncingYet:
-      'Wysyłanie działa, pobieranie jeszcze nie. Twoje wydatki trafiają do chmury, ale drugi telefon ich na razie nie zobaczy i nie da się ich stamtąd przywrócić do aplikacji. Rób kopie zapasowe tak samo jak dotąd — to nadal jedyny sposób na odzyskanie danych.',
+    cloudWarning:
+      'Synchronizacja działa w obie strony. Chmura przeniesie dane na nowy telefon, ale nie cofnie pomyłki — skasowany wydatek znika ze wszystkich urządzeń naraz. Kopia zapasowa nadal jest jedynym sposobem, żeby wrócić do stanu sprzed zmiany.',
 
     /** --- Logowanie i zakładanie konta --- */
     signInTitle: 'Zaloguj się',
@@ -526,9 +530,9 @@ export const strings = {
       UNKNOWN: 'Coś poszło nie tak i nie potrafimy powiedzieć co. Spróbuj ponownie za chwilę.',
     },
 
-    /** --- Wysyłka do chmury (Etap 14c) --- */
+    /** --- Synchronizacja (Etapy 14c i 14d) --- */
     sync: {
-      title: 'Wysyłka do chmury',
+      title: 'Synchronizacja',
 
       /**
        * Licznik zamiast ślepego przycisku — patrz `usePendingSyncCount`.
@@ -539,14 +543,32 @@ export const strings = {
         few: 'rekordy czekają na wysłanie',
         many: 'rekordów czeka na wysłanie',
       },
-      upToDate: 'Wszystko zostało już wysłane.',
+      upToDate: 'Wszystko jest już w chmurze.',
 
-      button: 'Wyślij do chmury',
-      working: 'Wysyłam...',
+      button: 'Synchronizuj',
+      working: 'Synchronizuję...',
 
       records: { one: 'rekord', few: 'rekordy', many: 'rekordów' },
       sent: (ile: number, forma: string) => `Wysłano ${ile} ${forma}.`,
-      nothingToSend: 'Nie było czego wysyłać — serwer ma już wszystko.',
+      received: (ile: number, forma: string) => `Pobrano ${ile} ${forma}.`,
+      nothingToDo: 'Nic się nie zmieniło — ten telefon i chmura mają to samo.',
+
+      /**
+       * Etap 14d: konflikt rozstrzygnął nowszy zapis, więc czyjaś zmiana
+       * nadpisała tutejszą. Użytkownik MUSI się o tym dowiedzieć — inaczej
+       * poprawiona przez niego kwota po cichu wróciłaby do starej wartości
+       * i wyglądałoby to na usterkę.
+       */
+      overwritten: (ile: number, forma: string) =>
+        `Nadpisano ${ile} ${forma} nowszą wersją z drugiego urządzenia.`,
+
+      /**
+       * Rekord, którego nie dało się zapisać — najczęściej wydatek
+       * w kategorii, która jeszcze nie dojechała. Po cichu pominięty wydatek
+       * to pieniądze, których nikt nie zobaczy w sumie miesiąca.
+       */
+      skipped: (ile: number, forma: string) =>
+        `Pominięto ${ile} ${forma} — czegoś, na co wskazywały, nie ma jeszcze w tym telefonie. Spróbuj ponownie za chwilę.`,
 
       /**
        * Powody odmowy. Każdy prowadzi do czegoś INNEGO, i tylko dlatego

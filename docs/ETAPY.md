@@ -1087,15 +1087,142 @@ zalogowanie na telefonie i wysyłka. Żaden test tego nie obejmuje — podstawio
 klient z definicji zgadza się na wszystko, a prawdziwe reguły RLS mogą
 odmówić.
 
-### Etap 14d — pobieranie i scalanie 🔜
+### Etap 14d — pobieranie i scalanie ✅ ZAKOŃCZONY
 
-- [ ] Pobieranie zmian od znacznika `synced_at` — kolumna i indeksy już są
-- [ ] Rozstrzyganie, który zapis jest nowszy, po `updated_at` (tekst ISO w UTC,
-      więc porównanie tekstów jest zarazem porównaniem chronologicznym)
-- [ ] Tłumaczenie `uuid` z powrotem na lokalne `id` przy zapisie
-- [ ] Zniesienie rekordu wskazującego na nieznaną jeszcze kategorię
-- [ ] Zapisane zestawienia i rejestr wygenerowanych rachunków — jedno i drugie
-      wypadło z Etapu 14c, bo nie ma trwałych identyfikatorów
+- [x] Pobieranie zmian od znacznika `synced_at`, stronami po 100 wierszy
+- [x] Znacznik „dokąd doszliśmy" w bazie — migracja 5, tabela `sync_state`
+- [x] Stałe identyfikatory danych startowych — migracja 6
+- [x] Rozstrzyganie konfliktu po `updated_at`: nowszy wygrywa
+- [x] Tłumaczenie `uuid` na lokalne `id` przy zapisie
+- [x] Pominięcie rekordu wskazującego na nieznaną kategorię, z licznikiem
+- [x] Pełna synchronizacja jednym przyciskiem: najpierw wysyłka, potem pobieranie
+- [x] 49 nowych testów (razem 520, wszystkie przechodzą)
+- [ ] Zapisane zestawienia i rejestr wygenerowanych rachunków — **nadal poza
+      synchronizacją**, uzasadnienie niżej
+
+**Drugi telefon widzi teraz dane pierwszego.** To zamyka Etap 14.
+
+#### Domyślne kategorie miały różne identyfikatory na każdym telefonie
+
+Największe odkrycie tego etapu i usterka, która sama by się nie ujawniła
+w żadnym teście jednostkowym.
+
+Każdy telefon zakłada sobie te same domyślne kategorie przy pierwszym
+uruchomieniu — i do tej pory LOSOWAŁ przy tym identyfikatory. Dla
+synchronizacji „Jedzenie" z telefonu A i „Jedzenie" z telefonu B były więc
+dwiema różnymi kategoriami. Po pierwszym pobraniu danych użytkownik zobaczyłby
+każdą domyślną pozycję podwójnie, bez żadnego sposobu, żeby je scalić.
+
+Migracja 6 nadaje im wartości stałe (`…0c01` dla „Jedzenia", `…0b04` dla
+„Gazu" i tak dalej), te same na każdym urządzeniu, i poprawia je w bazach,
+które powstały wcześniej. Dopasowanie idzie po NAZWIE, bo tylko ona jest
+wspólna dla obu baz.
+
+Kogo to omija: rekordy, którym użytkownik zmienił nazwę. Zostają przy losowym
+identyfikatorze i mogą pojawić się obok odpowiednika z drugiego telefonu.
+Świadoma granica — dopasowywanie „na oko" zmienionych nazw myliłoby się
+w drugą stronę, scalając kategorie, które ktoś celowo rozdzielił.
+
+To nie jest wyjątek od zasady „identyfikator jest losowy", tylko jej
+uzupełnienie. Losowanie służy temu, żeby rekordy utworzone NIEZALEŻNIE nigdy
+się nie zderzyły. Kategorie startowe nie powstają niezależnie — powstają
+z tej samej listy, w tej samej aplikacji, i mają być tym samym.
+
+#### Pobrany rekord nie może wrócić na serwer
+
+Najostrzejsza pułapka tego etapu. Wyzwalacz z migracji 4 podnosi znacznik
+„do wysłania" przy każdej edycji czystego rekordu — i nie odróżnia zmiany
+wpisanej przez użytkownika od zmiany POBRANEJ z chmury.
+
+Bez przeciwdziałania każde pobranie oznaczałoby rekord do odesłania. Drugi
+telefon zrobiłby dokładnie to samo i dwa urządzenia odbijałyby sobie te same
+wydatki przy każdej synchronizacji, w nieskończoność — bez żadnego widocznego
+objawu poza rosnącym transferem.
+
+Zapis danych z serwera gasi więc znacznik OSOBNYM zapytaniem, wykonanym po
+fakcie. Zmiana 1 → 0 nie spełnia warunku wyzwalacza (`old = 0 AND new = 0`),
+więc on się nie odpala. Pilnują tego dwa testy kontraktu, po jednym na każdą
+implementację.
+
+#### Skasowane nie wraca
+
+Wysyłka nie usuwa wierszy z serwera — dokłada nagrobek. Skasowany wydatek
+nadal tam leży i przy pobieraniu przyszedłby jako nowy. Dlatego przed zapisem
+każdego rekordu sprawdzamy, czy nie ma dla niego nagrobka.
+
+Z tego samego powodu skasowane pobieramy NA KOŃCU: gdyby szły pierwsze,
+wydatek zostałby usunięty, a zaraz potem wpisany z powrotem swoim własnym
+wierszem z tabeli płatności.
+
+#### Najpierw wysyłka, potem pobieranie
+
+Kolejność nie jest obojętna. Własne zmiany jadą na serwer, zanim przyjdą
+cudze — dzięki temu przy sporze o ten sam rekord porównujemy dwie wersje,
+które serwer już zna.
+
+Dotyczy to zwłaszcza KATEGORII. Są jedyną encją bez znacznika czasu zmiany,
+więc przy pobieraniu zawsze przegrywają z wersją z serwera. Wysłane najpierw,
+wracają jako ta sama wartość i nic nie ginie.
+
+#### Znacznik przesuwa się po każdej stronie, nie na końcu
+
+Ten sam powód, co przy wysyłce: przerwane pobieranie ma zachować to, co już
+dojechało. Znacznik bierzemy z `syncedAt` ostatniego wiersza strony, czyli
+z zegara SERWERA — zegar telefonu bywa przestawiony o godziny i kazałby
+pomijać zmiany albo pobierać w kółko te same.
+
+Znacznik przesuwa się także po wierszu, którego ta wersja aplikacji nie umie
+przeczytać. Inaczej pobieranie zatrzymałoby się na nim na zawsze i wszystko,
+co przyszło po nim, nigdy by nie dotarło. Taki wiersz jest liczony jako
+pominięty i ekran to pokazuje.
+
+#### Czego nadal nie synchronizujemy
+
+| Co                               | Dlaczego                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zapisane zestawienia             | Nie mają `uuid` — tabela `saved_report` powstała w Etapie 13 bez niego. Wymaga migracji i własnej tabeli w chmurze.                                           |
+| Rejestr wygenerowanych rachunków | Kluczowany LOKALNYM numerem szablonu, więc na drugim telefonie wskazywałby co innego. Przed podwójnym rachunkiem chroni indeks `idx_payment_auto_bill_month`. |
+| Zdjęcia paragonów                | Pliki, nie rekordy. Wymagają magazynu plików w chmurze — osobna decyzja, nie ten etap.                                                                        |
+
+Wszystkie trzy są w kopii zapasowej, więc nie giną przy zmianie telefonu —
+po prostu nie przechodzą przez chmurę.
+
+#### Ekran mówi więcej niż „gotowe"
+
+Wynik synchronizacji ma do czterech linii, bo ma cztery różne rzeczy do
+powiedzenia: ile wysłano, ile pobrano, ile NADPISANO nowszą wersją z drugiego
+urządzenia i ile POMINIĘTO. Dwie ostatnie muszą być widoczne — nadpisana
+poprawka wygląda inaczej jak usterka, a pominięty wydatek to pieniądze,
+których nie widać w sumie miesiąca.
+
+#### Ostrzeżenie na ekranie zmieniło treść po raz trzeci
+
+Etap 14a: nie wysyłała ani nie pobierała. 14c: wysyłała, nie pobierała.
+14d: umie jedno i drugie — i dopiero teraz wolno powiedzieć „synchronizacja
+działa".
+
+Zdanie zostaje mimo to, bo synchronizacja przynosi ryzyko, którego wcześniej
+nie było: kasowanie też się rozchodzi. Pomyłka na jednym telefonie znika ze
+wszystkich, a chmura nie pamięta, co było przedtem. Kopia zapasowa przestała
+być jedynym sposobem na PRZENIESIENIE danych, ale nadal jest jedynym sposobem,
+żeby COFNĄĆ zmianę.
+
+#### Sprawdzone
+
+| Sprawdzenie                            | Wynik                                           |
+| -------------------------------------- | ----------------------------------------------- |
+| `npm run typecheck`                    | czysty                                          |
+| `npm run lint`                         | czysty                                          |
+| `npm test`                             | 520 testów, 27 zestawów — wszystkie przechodzą  |
+| `npx expo export --platform web`       | build przechodzi                                |
+| Ekran konta w przeglądarce             | renderuje się, bez błędów w konsoli             |
+| Wysyłka na PRAWDZIWY serwer (Etap 14c) | potwierdzona 08.09.2026 — „Wysłano 17 rekordów" |
+
+**Do sprawdzenia na dwóch prawdziwych telefonach:** wpisanie wydatku na
+jednym, synchronizacja na obu, pojawienie się go na drugim. Skasowanie
+i sprawdzenie, że nie wraca. Żaden test tego nie obejmuje — podstawiony
+klient z definicji zgadza się na wszystko.
+
 - [ ] Konflikt rozstrzyga nowszy zapis (decyzja właściciela projektu, 08.09.2026)
 - [ ] Ekran stanu synchronizacji
 

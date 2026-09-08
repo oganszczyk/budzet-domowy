@@ -1,8 +1,9 @@
 /**
- * Etap 14c: haki ekranu konta — warstwa Application (8.1).
+ * Etap 14c/14d: haki ekranu konta — warstwa Application (8.1).
  *
- * Ekran nie zna ani Supabase, ani repozytorium. Pyta stąd „ile czeka" i mówi
- * „wyślij", a w odpowiedzi dostaje wynik opisany własnym typem, nie wyjątek.
+ * Ekran nie zna ani Supabase, ani repozytorium. Pyta stąd „ile czeka"
+ * i mówi „synchronizuj", a w odpowiedzi dostaje wynik opisany własnym typem,
+ * nie wyjątek.
  *
  * Tak samo, jak przy kopii zapasowej: „nie udało się" ma tu kilka RÓŻNYCH
  * znaczeń, a każde prowadzi użytkownika do czegoś innego. Brak internetu
@@ -13,8 +14,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getRepository } from '@/data';
+import { queryKeys } from '@/features/expenses/queries';
 
-import { countPendingChanges, pushPendingChanges, type SyncOutcome } from './sync-service';
+import { countPendingChanges, synchronize, type SyncOutcomeFull } from './sync-service';
 
 export const syncQueryKeys = {
   pendingCount: () => ['sync', 'pendingCount'] as const,
@@ -23,9 +25,9 @@ export const syncQueryKeys = {
 /**
  * Ile rekordów czeka na wysłanie.
  *
- * Liczba jest po to, żeby przycisk nie był ślepy. „Wyślij" bez niczego
- * obok każe zgadywać, czy w ogóle jest co wysyłać, a po naciśnięciu —
- * czy coś się w ogóle stało.
+ * Liczba jest po to, żeby przycisk nie był ślepy. Sam „Synchronizuj" nie mówi
+ * ani przed naciśnięciem, czy jest co wysyłać, ani po nim, czy cokolwiek się
+ * stało.
  */
 export function usePendingSyncCount() {
   return useQuery({
@@ -35,21 +37,30 @@ export function usePendingSyncCount() {
 }
 
 /**
- * Wysyła na serwer wszystko, czego jeszcze tam nie ma.
+ * Pełna synchronizacja: wysyła własne zmiany, potem pobiera cudze.
  *
- * Unieważnia wyłącznie licznik oczekujących. Wysyłka niczego nie zmienia
- * w danych — te same wydatki, te same sumy — więc odświeżanie ekranu
- * głównego byłoby pracą bez powodu.
+ * DLACZEGO UNIEWAŻNIAMY WSZYSTKIE ZAPYTANIA O DANE
+ *
+ * Do Etapu 14c synchronizacja tylko wysyłała i nie zmieniała niczego na
+ * ekranie — odświeżanie byłoby pracą bez powodu. Od 14d POBIERA: po udanej
+ * synchronizacji w bazie mogą być wydatki, których ekran główny jeszcze nie
+ * widział, i sumy miesiąca mogą być inne. Bez unieważnienia użytkownik
+ * zobaczyłby stare liczby aż do przełączenia miesiąca — i uznałby, że
+ * synchronizacja nic nie przyniosła.
  */
-export function usePushToCloud() {
+export function useSynchronize() {
   const queryClient = useQueryClient();
 
-  return useMutation<SyncOutcome>({
-    mutationFn: async () => pushPendingChanges(await getRepository()),
-    onSettled: () => {
-      // Także po niepowodzeniu: część rekordów mogła dojechać przed awarią
-      // i licznik musi to pokazać, zamiast straszyć starą liczbą.
+  return useMutation<SyncOutcomeFull>({
+    mutationFn: async () => synchronize(await getRepository()),
+    onSettled: (outcome) => {
+      // Także po niepowodzeniu: część zmian mogła dojechać w obie strony,
+      // zanim połączenie padło.
       void queryClient.invalidateQueries({ queryKey: syncQueryKeys.pendingCount() });
+
+      if (outcome && outcome.applied > 0) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.all });
+      }
     },
   });
 }

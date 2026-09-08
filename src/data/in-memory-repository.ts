@@ -34,6 +34,8 @@ import { newUuid } from '@/lib/uuid';
 
 import { buildDemoData } from './demo-data';
 import type {
+  ApplyResult,
+  RemoteChanges,
   PendingChanges,
   SyncedMark,
   SyncedMarks,
@@ -707,6 +709,216 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     for (const mark of marks.deletedRecords) {
       this.pendingSync.delete(this.pendingKey(`DELETED_${mark.entityType}`, mark.uuid));
     }
+  }
+
+  // --- Pobieranie i scalanie (Etap 14d) ---
+
+  private syncMarkers = new Map<string, string>();
+
+  async getSyncMarker(key: string): Promise<string | null> {
+    return this.syncMarkers.get(key) ?? null;
+  }
+
+  async setSyncMarker(key: string, value: string): Promise<void> {
+    this.syncMarkers.set(key, value);
+  }
+
+  private isTombstoned(entityType: DeletedRecord['entityType'], uuid: string): boolean {
+    return this.deletedRecords.some(
+      (record) => record.entityType === entityType && record.uuid === uuid
+    );
+  }
+
+  /**
+   * Zapisuje zmiany pobrane z serwera.
+   *
+   * Odpowiednik metody z wersji na SQLite, z tą różnicą, że tam znacznik
+   * „do wysłania" trzeba GASIĆ po zapisie (podnosi go wyzwalacz), a tutaj
+   * wystarczy go nie podnosić. Wynik ma być identyczny i pilnują tego
+   * testy kontraktu — bo rekord odesłany z powrotem na serwer po każdym
+   * pobraniu to pętla, której nikt nie zauważy, dopóki nie policzy żądań.
+   */
+  async applyRemoteChanges(changes: RemoteChanges): Promise<ApplyResult> {
+    let applied = 0;
+    let skipped = 0;
+    let overwritten = 0;
+
+    const idKategorii = (uuid: string | null): number | null =>
+      uuid === null ? null : (this.categories.find((c) => c.uuid === uuid)?.id ?? null);
+
+    for (const category of changes.categories) {
+      if (this.isTombstoned('CATEGORY', category.uuid)) continue;
+
+      const index = this.categories.findIndex((c) => c.uuid === category.uuid);
+
+      if (index === -1) {
+        this.categories.push({ ...category, id: this.nextCategoryId++ });
+      } else {
+        this.categories[index] = { ...category, id: this.categories[index].id };
+        this.pendingSync.delete(this.pendingKey('CATEGORY', category.uuid));
+      }
+
+      applied++;
+    }
+
+    for (const template of changes.billTemplates) {
+      if (this.isTombstoned('BILL_TEMPLATE', template.uuid)) continue;
+
+      const categoryId = idKategorii(template.categoryUuid);
+      if (categoryId === null) {
+        skipped++;
+        continue;
+      }
+
+      const index = this.billTemplates.findIndex((item) => item.uuid === template.uuid);
+      const { categoryUuid: _pominiete, syncedAt: _znacznik, ...dane } = template;
+
+      if (index === -1) {
+        this.billTemplates.push({ ...dane, categoryId, id: this.nextBillTemplateId++ });
+        applied++;
+        continue;
+      }
+
+      if (template.updatedAt <= this.billTemplates[index].updatedAt) continue;
+
+      if (this.isPending('BILL_TEMPLATE', template.uuid)) overwritten++;
+      this.billTemplates[index] = { ...dane, categoryId, id: this.billTemplates[index].id };
+      this.pendingSync.delete(this.pendingKey('BILL_TEMPLATE', template.uuid));
+      applied++;
+    }
+
+    for (const subscription of changes.subscriptions) {
+      if (this.isTombstoned('SUBSCRIPTION', subscription.uuid)) continue;
+
+      const categoryId = idKategorii(subscription.categoryUuid);
+      if (categoryId === null) {
+        skipped++;
+        continue;
+      }
+
+      const index = this.subscriptions.findIndex((item) => item.uuid === subscription.uuid);
+      const { categoryUuid: _pominiete, syncedAt: _znacznik, ...dane } = subscription;
+
+      if (index === -1) {
+        this.subscriptions.push({ ...dane, categoryId, id: this.nextSubscriptionId++ });
+        applied++;
+        continue;
+      }
+
+      if (subscription.updatedAt <= this.subscriptions[index].updatedAt) continue;
+
+      if (this.isPending('SUBSCRIPTION', subscription.uuid)) overwritten++;
+      this.subscriptions[index] = { ...dane, categoryId, id: this.subscriptions[index].id };
+      this.pendingSync.delete(this.pendingKey('SUBSCRIPTION', subscription.uuid));
+      applied++;
+    }
+
+    for (const payment of changes.payments) {
+      if (this.isTombstoned('PAYMENT', payment.uuid)) continue;
+
+      const categoryId = idKategorii(payment.categoryUuid);
+      if (categoryId === null) {
+        skipped++;
+        continue;
+      }
+
+      const billTemplateId =
+        payment.billTemplateUuid === null
+          ? null
+          : (this.billTemplates.find((item) => item.uuid === payment.billTemplateUuid)?.id ?? null);
+      const subscriptionId =
+        payment.subscriptionUuid === null
+          ? null
+          : (this.subscriptions.find((item) => item.uuid === payment.subscriptionUuid)?.id ?? null);
+
+      const index = this.payments.findIndex((item) => item.uuid === payment.uuid);
+      const {
+        categoryUuid: _kategoria,
+        billTemplateUuid: _szablon,
+        subscriptionUuid: _subskrypcja,
+        syncedAt: _znacznik,
+        ...dane
+      } = payment;
+
+      // Ścieżka do zdjęcia i status nie przychodzą z serwera — patrz
+      // `sync-payload.ts`. Status wyliczamy przy odczycie.
+      const zapis = {
+        ...dane,
+        categoryId,
+        billTemplateId,
+        subscriptionId,
+        status: null,
+        receiptImagePath: null,
+      };
+
+      if (index === -1) {
+        this.payments.push({ ...zapis, id: this.nextPaymentId++ });
+        applied++;
+        continue;
+      }
+
+      if (payment.updatedAt <= this.payments[index].updatedAt) continue;
+
+      if (this.isPending('PAYMENT', payment.uuid)) overwritten++;
+      this.payments[index] = { ...zapis, id: this.payments[index].id };
+      this.pendingSync.delete(this.pendingKey('PAYMENT', payment.uuid));
+      applied++;
+    }
+
+    for (const income of changes.incomes) {
+      if (this.isTombstoned('INCOME', income.uuid)) continue;
+
+      const index = this.incomes.findIndex((item) => item.uuid === income.uuid);
+      const { syncedAt: _znacznik, ...dane } = income;
+
+      if (index === -1) {
+        this.incomes.push({ ...dane, id: this.nextIncomeId++ });
+        applied++;
+        continue;
+      }
+
+      if (income.updatedAt <= this.incomes[index].updatedAt) continue;
+
+      if (this.isPending('INCOME', income.uuid)) overwritten++;
+      this.incomes[index] = { ...dane, id: this.incomes[index].id };
+      this.pendingSync.delete(this.pendingKey('INCOME', income.uuid));
+      applied++;
+    }
+
+    for (const record of changes.deletedRecords) {
+      switch (record.entityType) {
+        case 'PAYMENT':
+          this.payments = this.payments.filter((item) => item.uuid !== record.uuid);
+          break;
+        case 'CATEGORY':
+          this.categories = this.categories.filter((item) => item.uuid !== record.uuid);
+          break;
+        case 'BILL_TEMPLATE':
+          this.billTemplates = this.billTemplates.filter((item) => item.uuid !== record.uuid);
+          break;
+        case 'SUBSCRIPTION':
+          this.subscriptions = this.subscriptions.filter((item) => item.uuid !== record.uuid);
+          break;
+        case 'INCOME':
+          this.incomes = this.incomes.filter((item) => item.uuid !== record.uuid);
+          break;
+      }
+
+      this.deletedRecords = this.deletedRecords.filter(
+        (item) => !(item.entityType === record.entityType && item.uuid === record.uuid)
+      );
+      this.deletedRecords.push({
+        entityType: record.entityType,
+        uuid: record.uuid,
+        deletedAt: record.deletedAt,
+      });
+      // Serwer już o tym wie, więc nagrobek nie wraca do kolejki wysyłki.
+      this.pendingSync.delete(this.pendingKey(`DELETED_${record.entityType}`, record.uuid));
+
+      applied++;
+    }
+
+    return { applied, skipped, overwritten };
   }
 
   async exportSnapshot(): Promise<BackupSnapshot> {

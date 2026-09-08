@@ -30,6 +30,8 @@ import {
 import { newUuid } from '@/lib/uuid';
 
 import type {
+  ApplyResult,
+  RemoteChanges,
   PendingChanges,
   SyncedMark,
   SyncedMarks,
@@ -1030,6 +1032,404 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       await this.db.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  // --- Pobieranie i scalanie (Etap 14d) ---
+
+  async getSyncMarker(key: string): Promise<string | null> {
+    const row = await this.db.first<{ value: string }>(
+      'SELECT value FROM sync_state WHERE key = ?',
+      [key]
+    );
+    return row?.value ?? null;
+  }
+
+  async setSyncMarker(key: string, value: string): Promise<void> {
+    await this.db.run('INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)', [key, value]);
+  }
+
+  /** Lokalny numer rekordu o tym trwałym identyfikatorze; `null`, gdy go tu nie ma. */
+  private async idForUuid(table: string, uuid: string): Promise<number | null> {
+    const row = await this.db.first<{ id: number }>(`SELECT id FROM ${table} WHERE uuid = ?`, [
+      uuid,
+    ]);
+    return row?.id ?? null;
+  }
+
+  /**
+   * Czy ten rekord został już skasowany — u nas albo na drugim telefonie.
+   *
+   * Bez tego sprawdzenia pobieranie WSKRZESZAŁOBY skasowane wydatki. Wysyłka
+   * nie usuwa wierszy z serwera, tylko dokłada nagrobek, więc skasowany
+   * wydatek nadal tam leży i przy pobraniu wróciłby jako nowy. Nagrobek jest
+   * jedyną rzeczą, która mówi „nie, tego już nie ma".
+   */
+  private async isTombstoned(entityType: string, uuid: string): Promise<boolean> {
+    const row = await this.db.first<{ uuid: string }>(
+      'SELECT uuid FROM deleted_record WHERE entityType = ? AND uuid = ?',
+      [entityType, uuid]
+    );
+    return row !== null && row !== undefined;
+  }
+
+  /**
+   * Gasi znacznik „do wysłania" po zapisaniu zmiany Z SERWERA.
+   *
+   * DLACZEGO TO MUSI BYĆ OSOBNE ZAPYTANIE, A NIE KOLUMNA W POPRZEDNIM
+   *
+   * Wyzwalacz z migracji 4 podnosi znacznik przy każdej edycji czystego
+   * rekordu — nie odróżnia zmiany wpisanej przez użytkownika od zmiany
+   * pobranej z chmury. Zapisanie danych z serwera zapala więc znacznik,
+   * a rekord pojechałby z powrotem na serwer przy najbliższej wysyłce.
+   * Drugi telefon zrobiłby dokładnie to samo i dwa urządzenia odbijałyby
+   * sobie te same rekordy bez końca, przy każdej synchronizacji.
+   *
+   * Drugie zapytanie gasi znacznik po fakcie. Zmiana 1 → 0 nie spełnia
+   * warunku wyzwalacza (`old = 0 AND new = 0`), więc on się nie odpala.
+   */
+  private async clearPending(table: string, id: number): Promise<void> {
+    await this.db.run(`UPDATE ${table} SET pendingSync = 0 WHERE id = ?`, [id]);
+  }
+
+  async applyRemoteChanges(changes: RemoteChanges): Promise<ApplyResult> {
+    let applied = 0;
+    let skipped = 0;
+    let overwritten = 0;
+
+    await this.db.exec('BEGIN');
+
+    try {
+      // --- Kategorie ---------------------------------------------------
+      //
+      // Kategoria jako jedyna encja nie ma `updatedAt`, więc nie da się
+      // rozstrzygnąć, która wersja jest nowsza — wersja z serwera wygrywa.
+      // To bezpieczne, bo synchronizacja NAJPIERW wysyła, a dopiero potem
+      // pobiera: własna zmiana zdąży pojechać na serwer i wraca jako ta sama.
+      for (const category of changes.categories) {
+        if (await this.isTombstoned('CATEGORY', category.uuid)) continue;
+
+        const id = await this.idForUuid('category', category.uuid);
+
+        if (id === null) {
+          await this.db.run(
+            `INSERT INTO category (uuid, name, iconKey, isActive, sortOrder, usedBy, pendingSync)
+             VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            [
+              category.uuid,
+              category.name,
+              category.iconKey,
+              toDbBool(category.isActive),
+              category.sortOrder,
+              category.usedBy.join(','),
+            ]
+          );
+        } else {
+          await this.db.run(
+            `UPDATE category SET name = ?, iconKey = ?, isActive = ?, sortOrder = ?, usedBy = ?
+              WHERE id = ?`,
+            [
+              category.name,
+              category.iconKey,
+              toDbBool(category.isActive),
+              category.sortOrder,
+              category.usedBy.join(','),
+              id,
+            ]
+          );
+          await this.clearPending('category', id);
+        }
+
+        applied++;
+      }
+
+      // --- Szablony rachunków -----------------------------------------
+      for (const template of changes.billTemplates) {
+        if (await this.isTombstoned('BILL_TEMPLATE', template.uuid)) continue;
+
+        const categoryId =
+          template.categoryUuid === null
+            ? null
+            : await this.idForUuid('category', template.categoryUuid);
+
+        // Kategoria jest w bazie wymagana. Szablon bez niej nie ma jak
+        // powstać — zostawiamy go na następną synchronizację i liczymy,
+        // żeby użytkownik zobaczył, że coś nie dojechało.
+        if (categoryId === null) {
+          skipped++;
+          continue;
+        }
+
+        const existing = await this.db.first<{
+          id: number;
+          updatedAt: string;
+          pendingSync: number;
+        }>('SELECT id, updatedAt, pendingSync FROM bill_template WHERE uuid = ?', [template.uuid]);
+
+        if (!existing) {
+          await this.db.run(
+            `INSERT INTO bill_template
+               (uuid, name, categoryId, defaultDueDay, isActive, useFixedAmount,
+                fixedAmountGrosze, createdAt, updatedAt, pendingSync)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [
+              template.uuid,
+              template.name,
+              categoryId,
+              template.defaultDueDay,
+              toDbBool(template.isActive),
+              toDbBool(template.useFixedAmount),
+              template.fixedAmountGrosze,
+              template.createdAt,
+              template.updatedAt,
+            ]
+          );
+          applied++;
+          continue;
+        }
+
+        if (template.updatedAt <= existing.updatedAt) continue;
+
+        await this.db.run(
+          `UPDATE bill_template SET name = ?, categoryId = ?, defaultDueDay = ?, isActive = ?,
+             useFixedAmount = ?, fixedAmountGrosze = ?, updatedAt = ?
+            WHERE id = ?`,
+          [
+            template.name,
+            categoryId,
+            template.defaultDueDay,
+            toDbBool(template.isActive),
+            toDbBool(template.useFixedAmount),
+            template.fixedAmountGrosze,
+            template.updatedAt,
+            existing.id,
+          ]
+        );
+        await this.clearPending('bill_template', existing.id);
+        if (existing.pendingSync === 1) overwritten++;
+        applied++;
+      }
+
+      // --- Subskrypcje --------------------------------------------------
+      for (const subscription of changes.subscriptions) {
+        if (await this.isTombstoned('SUBSCRIPTION', subscription.uuid)) continue;
+
+        const categoryId =
+          subscription.categoryUuid === null
+            ? null
+            : await this.idForUuid('category', subscription.categoryUuid);
+
+        if (categoryId === null) {
+          skipped++;
+          continue;
+        }
+
+        const existing = await this.db.first<{
+          id: number;
+          updatedAt: string;
+          pendingSync: number;
+        }>('SELECT id, updatedAt, pendingSync FROM subscription WHERE uuid = ?', [
+          subscription.uuid,
+        ]);
+
+        const wartosci = [
+          subscription.name,
+          subscription.amountGrosze,
+          subscription.frequencyType,
+          subscription.customIntervalMonths,
+          subscription.startDate,
+          subscription.nextPaymentDate,
+          categoryId,
+          toDbBool(subscription.isActive),
+          subscription.lastUsageConfirmationDate,
+          subscription.confirmationIntervalMonths,
+          subscription.updatedAt,
+        ];
+
+        if (!existing) {
+          await this.db.run(
+            `INSERT INTO subscription
+               (uuid, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
+                nextPaymentDate, categoryId, isActive, lastUsageConfirmationDate,
+                confirmationIntervalMonths, updatedAt, createdAt, pendingSync)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [subscription.uuid, ...wartosci, subscription.createdAt]
+          );
+          applied++;
+          continue;
+        }
+
+        if (subscription.updatedAt <= existing.updatedAt) continue;
+
+        await this.db.run(
+          `UPDATE subscription SET name = ?, amountGrosze = ?, frequencyType = ?,
+             customIntervalMonths = ?, startDate = ?, nextPaymentDate = ?, categoryId = ?,
+             isActive = ?, lastUsageConfirmationDate = ?, confirmationIntervalMonths = ?,
+             updatedAt = ?
+            WHERE id = ?`,
+          [...wartosci, existing.id]
+        );
+        await this.clearPending('subscription', existing.id);
+        if (existing.pendingSync === 1) overwritten++;
+        applied++;
+      }
+
+      // --- Płatności ----------------------------------------------------
+      for (const payment of changes.payments) {
+        if (await this.isTombstoned('PAYMENT', payment.uuid)) continue;
+
+        const categoryId =
+          payment.categoryUuid === null
+            ? null
+            : await this.idForUuid('category', payment.categoryUuid);
+
+        if (categoryId === null) {
+          skipped++;
+          continue;
+        }
+
+        // Szablon i subskrypcja mogą się nie odnaleźć i to NIE jest powód,
+        // żeby wydatek odrzucić. Zgubione wskazanie kosztuje jedną linię
+        // w historii kwot rachunku; zgubiony wydatek kosztuje pieniądze,
+        // których nie widać w sumie miesiąca.
+        const billTemplateId =
+          payment.billTemplateUuid === null
+            ? null
+            : await this.idForUuid('bill_template', payment.billTemplateUuid);
+        const subscriptionId =
+          payment.subscriptionUuid === null
+            ? null
+            : await this.idForUuid('subscription', payment.subscriptionUuid);
+
+        const existing = await this.db.first<{
+          id: number;
+          updatedAt: string;
+          pendingSync: number;
+        }>('SELECT id, updatedAt, pendingSync FROM payment WHERE uuid = ?', [payment.uuid]);
+
+        // `status` i `receiptImagePath` nie przychodzą z serwera i nie mogą
+        // przyjść — patrz `sync-payload.ts`. Status wyliczamy przy odczycie,
+        // a ścieżka do zdjęcia dotyczy pamięci tamtego telefonu.
+        const wartosci = [
+          payment.mainType,
+          categoryId,
+          payment.title,
+          payment.amountGrosze,
+          payment.effectiveDate,
+          payment.dueDate,
+          payment.paidDate,
+          payment.source,
+          payment.merchant,
+          payment.description,
+          payment.paymentMethod,
+          billTemplateId,
+          subscriptionId,
+          payment.updatedAt,
+        ];
+
+        if (!existing) {
+          await this.db.run(
+            `INSERT INTO payment
+               (uuid, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+                source, merchant, description, paymentMethod, billTemplateId, subscriptionId,
+                updatedAt, createdAt, status, receiptImagePath, pendingSync)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0)`,
+            [payment.uuid, ...wartosci, payment.createdAt]
+          );
+          applied++;
+          continue;
+        }
+
+        if (payment.updatedAt <= existing.updatedAt) continue;
+
+        await this.db.run(
+          `UPDATE payment SET mainType = ?, categoryId = ?, title = ?, amountGrosze = ?,
+             effectiveDate = ?, dueDate = ?, paidDate = ?, source = ?, merchant = ?,
+             description = ?, paymentMethod = ?, billTemplateId = ?, subscriptionId = ?,
+             updatedAt = ?
+            WHERE id = ?`,
+          [...wartosci, existing.id]
+        );
+        await this.clearPending('payment', existing.id);
+        if (existing.pendingSync === 1) overwritten++;
+        applied++;
+      }
+
+      // --- Dochody ------------------------------------------------------
+      for (const income of changes.incomes) {
+        if (await this.isTombstoned('INCOME', income.uuid)) continue;
+
+        const existing = await this.db.first<{
+          id: number;
+          updatedAt: string;
+          pendingSync: number;
+        }>('SELECT id, updatedAt, pendingSync FROM income WHERE uuid = ?', [income.uuid]);
+
+        if (!existing) {
+          await this.db.run(
+            `INSERT INTO income (uuid, personName, amountGrosze, month, createdAt, updatedAt, pendingSync)
+             VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            [
+              income.uuid,
+              income.personName,
+              income.amountGrosze,
+              income.month,
+              income.createdAt,
+              income.updatedAt,
+            ]
+          );
+          applied++;
+          continue;
+        }
+
+        if (income.updatedAt <= existing.updatedAt) continue;
+
+        await this.db.run(
+          'UPDATE income SET personName = ?, amountGrosze = ?, month = ?, updatedAt = ? WHERE id = ?',
+          [income.personName, income.amountGrosze, income.month, income.updatedAt, existing.id]
+        );
+        await this.clearPending('income', existing.id);
+        if (existing.pendingSync === 1) overwritten++;
+        applied++;
+      }
+
+      // --- Skasowane na drugim telefonie --------------------------------
+      const TABELA_ENCJI: Record<string, string> = {
+        PAYMENT: 'payment',
+        CATEGORY: 'category',
+        BILL_TEMPLATE: 'bill_template',
+        SUBSCRIPTION: 'subscription',
+        INCOME: 'income',
+      };
+
+      for (const record of changes.deletedRecords) {
+        const tabela = TABELA_ENCJI[record.entityType];
+        if (!tabela) {
+          skipped++;
+          continue;
+        }
+
+        // Kasowanie odpala wyzwalacz z migracji 4, który zapisze nagrobek
+        // z LOKALNĄ datą i oznaczy go do wysłania. Zaraz potem nadpisujemy
+        // go wersją z serwera — z prawdziwą datą skasowania i zgaszonym
+        // znacznikiem, bo serwer już o tym wie.
+        await this.db.run(`DELETE FROM ${tabela} WHERE uuid = ?`, [record.uuid]);
+
+        await this.db.run(
+          `INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+           VALUES (?, ?, ?, 0)`,
+          [record.entityType, record.uuid, record.deletedAt]
+        );
+
+        applied++;
+      }
+
+      await this.db.exec('COMMIT');
+    } catch (error) {
+      await this.db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return { applied, skipped, overwritten };
   }
 
   async exportSnapshot(): Promise<BackupSnapshot> {

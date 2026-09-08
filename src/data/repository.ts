@@ -167,6 +167,68 @@ export type SyncedMarks = {
   deletedRecords: { entityType: DeletedRecord['entityType']; uuid: string }[];
 };
 
+/**
+ * Etap 14d: ZMIANY PRZYCHODZĄCE Z SERWERA.
+ *
+ * Lustrzane odbicie `PendingChanges`. Rekord z chmury nie ma lokalnego `id` —
+ * na tym telefonie może go jeszcze w ogóle nie być, a jeśli jest, to pod
+ * numerem, którego drugie urządzenie nie zna. Wskazania na inne rekordy
+ * przychodzą po `uuid` i repozytorium tłumaczy je na lokalne numery.
+ *
+ * `syncedAt` to znacznik ZEGARA SERWERA, nie telefonu. Po nim wiemy, dokąd
+ * doszliśmy z pobieraniem. Zegar telefonu bywa przestawiony i do tego się
+ * nie nadaje.
+ */
+export type RemoteCategory = Omit<Category, 'id'> & { syncedAt: string };
+
+export type RemoteBillTemplate = Omit<BillTemplate, 'id' | 'categoryId'> & {
+  categoryUuid: string | null;
+  syncedAt: string;
+};
+
+export type RemoteSubscription = Omit<Subscription, 'id' | 'categoryId'> & {
+  categoryUuid: string | null;
+  syncedAt: string;
+};
+
+export type RemotePayment = Omit<
+  Payment,
+  'id' | 'categoryId' | 'billTemplateId' | 'subscriptionId'
+> & {
+  categoryUuid: string | null;
+  billTemplateUuid: string | null;
+  subscriptionUuid: string | null;
+  syncedAt: string;
+};
+
+export type RemoteIncome = Omit<Income, 'id'> & { syncedAt: string };
+
+export type RemoteDeletion = DeletedRecord & { syncedAt: string };
+
+export type RemoteChanges = {
+  categories: RemoteCategory[];
+  billTemplates: RemoteBillTemplate[];
+  subscriptions: RemoteSubscription[];
+  payments: RemotePayment[];
+  incomes: RemoteIncome[];
+  deletedRecords: RemoteDeletion[];
+};
+
+/**
+ * Co się stało z pobraną paczką.
+ *
+ * `skipped` to rekordy, których nie dało się zapisać, bo wskazywały na coś,
+ * czego ten telefon jeszcze nie zna — na przykład wydatek w kategorii, która
+ * nie dojechała. Liczba różna od zera nie jest awarią, ale MUSI być widoczna:
+ * po cichu pominięty wydatek to wydatek, którego nikt nigdy nie zobaczy.
+ */
+export type ApplyResult = {
+  applied: number;
+  skipped: number;
+  /** Nadpisane zmiany lokalne — rekord na serwerze był nowszy (BR: nowszy wygrywa). */
+  overwritten: number;
+};
+
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
   category: Category;
@@ -378,6 +440,30 @@ export interface ExpensesRepository {
    * wysyłce znaczy, że nic już tego rekordu nie wyśle.
    */
   markSynced(marks: SyncedMarks): Promise<void>;
+
+  /**
+   * Etap 14d: zapisuje zmiany pobrane z serwera.
+   *
+   * DWIE ZASADY, KTÓRYCH NIE WOLNO ZŁAMAĆ.
+   *
+   * 1. Zapis NIE MOŻE oznaczyć rekordu jako „do wysłania". Inaczej każde
+   *    pobranie kazałoby odesłać to samo z powrotem, drugi telefon zrobiłby
+   *    to samo i dwa urządzenia odbijałyby sobie te same rekordy bez końca.
+   *
+   * 2. Konflikt rozstrzyga NOWSZY zapis (decyzja właściciela projektu,
+   *    08.09.2026). Porównujemy `updatedAt` — tekst ISO w strefie UTC,
+   *    więc porównanie tekstów jest zarazem porównaniem chronologicznym.
+   */
+  applyRemoteChanges(changes: RemoteChanges): Promise<ApplyResult>;
+
+  /**
+   * Znacznik „dokąd doszliśmy z pobieraniem" dla jednej tabeli.
+   *
+   * `null` znaczy „nigdy nic nie pobrałem" — czyli pobierz wszystko.
+   * To poprawny stan po pierwszej instalacji, nie usterka.
+   */
+  getSyncMarker(key: string): Promise<string | null>;
+  setSyncMarker(key: string, value: string): Promise<void>;
 
   exportSnapshot(): Promise<BackupSnapshot>;
 

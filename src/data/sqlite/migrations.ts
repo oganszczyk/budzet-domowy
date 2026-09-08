@@ -343,6 +343,70 @@ export const MIGRATIONS: string[] = [
       VALUES ('INCOME', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
     END;
   `,
+
+  // --- wersja 5: znacznik „co już pobrano z serwera" (Etap 14d) ---
+  //
+  // Pobieranie musi wiedzieć, gdzie skończyło poprzednim razem. Bez tego
+  // każda synchronizacja ściągałaby całą historię wydatków od początku —
+  // działałoby to przy stu rekordach i przestało przy kilku tysiącach.
+  //
+  // ZNACZNIK POCHODZI Z ZEGARA SERWERA, nie telefonu. Kolumna `synced_at`
+  // w chmurze jest stemplowana przez Postgresa (patrz plik SQL). Zegar
+  // telefonu bywa przestawiony o godziny — znacznik z niego wzięty kazałby
+  // pomijać zmiany albo pobierać w kółko te same.
+  //
+  // Tabela jest celowo OGÓLNA (klucz i wartość), a nie kolumną na każdą
+  // tabelę osobno. Znaczników przybędzie wraz z tym, co synchronizujemy,
+  // a każdy nowy nie powinien wymagać migracji schematu.
+  //
+  // Wartości NIE MA po pierwszej instalacji i to jest poprawny stan:
+  // brak znacznika znaczy „nigdy nic nie pobrałem", czyli pobierz wszystko.
+  `
+  CREATE TABLE sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
+
+  // --- wersja 6: stałe identyfikatory danych startowych (Etap 14d) ---
+  //
+  // Do tej pory każdy telefon LOSOWAŁ identyfikatory dla tych samych
+  // domyślnych kategorii i rachunków. Dla synchronizacji „Jedzenie" z jednego
+  // telefonu i „Jedzenie" z drugiego były więc dwiema różnymi kategoriami —
+  // po pierwszym pobraniu danych użytkownik zobaczyłby każdą domyślną
+  // pozycję podwójnie, bez żadnego sposobu, żeby je scalić.
+  //
+  // Ta migracja nadaje im wartości stałe, te same na każdym urządzeniu.
+  // Dopasowanie idzie po NAZWIE, bo tylko ona jest wspólna dla obu baz.
+  //
+  // KOGO TO OMIJA: rekordy, którym użytkownik zmienił nazwę. Zostają przy
+  // losowym identyfikatorze i po synchronizacji mogą pojawić się obok
+  // odpowiednika z drugiego telefonu. Świadoma granica — dopasowywanie
+  // „na oko" zmienionych nazw myliłoby się w drugą stronę, scalając
+  // kategorie, które użytkownik celowo rozdzielił.
+  //
+  // Zapis podnosi znacznik „do wysłania" wyzwalaczem z migracji 4, więc
+  // poprawione rekordy pojadą na serwer przy najbliższej synchronizacji.
+  `
+  UPDATE category SET uuid = '00000000000000000000000000000c00' WHERE name = 'Rachunki domowe';
+  UPDATE category SET uuid = '00000000000000000000000000000c01' WHERE name = 'Jedzenie';
+  UPDATE category SET uuid = '00000000000000000000000000000c02' WHERE name = 'Kosmetyki i higiena';
+  UPDATE category SET uuid = '00000000000000000000000000000c03' WHERE name = 'Sprzątanie';
+  UPDATE category SET uuid = '00000000000000000000000000000c04' WHERE name = 'Ubrania';
+  UPDATE category SET uuid = '00000000000000000000000000000c05' WHERE name = 'Mieszkanie';
+  UPDATE category SET uuid = '00000000000000000000000000000c06' WHERE name = 'Rozrywka';
+  UPDATE category SET uuid = '00000000000000000000000000000c07' WHERE name = 'Sport';
+  UPDATE category SET uuid = '00000000000000000000000000000c08' WHERE name = 'Komputerowe';
+  UPDATE category SET uuid = '00000000000000000000000000000c09' WHERE name = 'Inne';
+
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b01' WHERE name = 'Czynsz za mieszkanie';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b02' WHERE name = 'Prąd';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b03' WHERE name = 'Woda';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b04' WHERE name = 'Gaz';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b05' WHERE name = 'Internet';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b06' WHERE name = 'Telefon';
+  UPDATE bill_template SET uuid = '00000000000000000000000000000b07' WHERE name = 'Ubezpieczenie';
+  `,
 ];
 
 /** Wersja schematu, do której doprowadzają wszystkie migracje. */
