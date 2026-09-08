@@ -1,11 +1,14 @@
 import {
   addMonths,
+  compareYearMonth,
   daysInMonth,
   dueDateFor,
   formatDate,
   formatMonthYear,
   isSameMonth,
   monthRange,
+  monthSpan,
+  monthsBetween,
   yearMonthOf,
 } from './date';
 
@@ -85,5 +88,41 @@ describe('yearMonthOf / isSameMonth', () => {
   it('porównuje miesiące', () => {
     expect(isSameMonth({ year: 2026, month: 7 }, { year: 2026, month: 7 })).toBe(true);
     expect(isSameMonth({ year: 2026, month: 7 }, { year: 2025, month: 7 })).toBe(false);
+  });
+});
+
+describe('zakres miesięcy (Etap 12: analiza)', () => {
+  it('compareYearMonth porządkuje chronologicznie, także przez przełom roku', () => {
+    expect(compareYearMonth({ year: 2025, month: 12 }, { year: 2026, month: 1 })).toBeLessThan(0);
+    expect(compareYearMonth({ year: 2026, month: 3 }, { year: 2026, month: 3 })).toBe(0);
+    expect(compareYearMonth({ year: 2026, month: 5 }, { year: 2026, month: 2 })).toBeGreaterThan(0);
+  });
+
+  it('monthSpan obejmuje pierwszy dzień początku i ostatni dzień końca', () => {
+    expect(monthSpan({ year: 2026, month: 1 }, { year: 2026, month: 2 })).toEqual({
+      start: '2026-01-01',
+      end: '2026-02-28',
+    });
+  });
+
+  it('monthSpan przyjmuje zakres podany na opak', () => {
+    const forwards = monthSpan({ year: 2025, month: 11 }, { year: 2026, month: 3 });
+    const backwards = monthSpan({ year: 2026, month: 3 }, { year: 2025, month: 11 });
+    expect(backwards).toEqual(forwards);
+  });
+
+  it('monthsBetween zwraca kolejne miesiące razem ze skrajnymi', () => {
+    expect(monthsBetween({ year: 2025, month: 11 }, { year: 2026, month: 2 })).toEqual([
+      { year: 2025, month: 11 },
+      { year: 2025, month: 12 },
+      { year: 2026, month: 1 },
+      { year: 2026, month: 2 },
+    ]);
+  });
+
+  it('monthsBetween dla jednego miesiąca zwraca jeden element', () => {
+    expect(monthsBetween({ year: 2026, month: 8 }, { year: 2026, month: 8 })).toEqual([
+      { year: 2026, month: 8 },
+    ]);
   });
 });

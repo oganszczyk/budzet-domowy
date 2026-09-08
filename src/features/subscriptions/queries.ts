@@ -39,6 +39,22 @@ export function useSubscriptionsScreen() {
   });
 }
 
+/**
+ * Sama lista subskrypcji, BEZ generowania płatności (Etap 12: analiza).
+ *
+ * `useSubscriptionsScreen` przy okazji odczytu dopisuje należne płatności
+ * wybranego miesiąca i zależy od przełącznika miesiąca. Ekran analizy nie
+ * potrzebuje ani jednego, ani drugiego — chce wyłącznie nazw pozycji do
+ * wyboru. Wywołanie tamtego hooka tworzyłoby tu rekordy jako efekt uboczny
+ * samego otwarcia zestawienia.
+ */
+export function useSubscriptionList() {
+  return useQuery({
+    queryKey: queryKeys.subscriptions(),
+    queryFn: async () => (await getRepository()).listSubscriptions(),
+  });
+}
+
 /** Pojedyncza subskrypcja — ekran szczegółów. */
 export function useSubscription(id: number) {
   return useQuery({

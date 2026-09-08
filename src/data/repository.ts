@@ -15,6 +15,7 @@
  * interfejs tego nie zakładał, podmiana wymusiłaby przepisanie ekranów.
  */
 
+import type { SavedReport } from '@/domain/analysis';
 import type { BackupSnapshot } from '@/domain/backup';
 import type { MainType } from '@/domain/enums';
 import type {
@@ -53,6 +54,14 @@ export type NewIncome = Omit<Income, 'id' | 'createdAt' | 'updatedAt'>;
 
 /** Pola, które wolno zmienić w zapisanym dochodzie. */
 export type IncomePatch = Partial<NewIncome>;
+
+/** Dane potrzebne do zapisania zestawienia (Etap 13). Kolejność nadaje repozytorium. */
+export type NewSavedReport = Omit<SavedReport, 'id' | 'sortOrder' | 'createdAt' | 'updatedAt'> & {
+  sortOrder?: number;
+};
+
+/** Pola, które wolno zmienić w zapisanym zestawieniu — w praktyce nazwa. */
+export type SavedReportPatch = Partial<Omit<SavedReport, 'id' | 'createdAt' | 'updatedAt'>>;
 
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
@@ -179,6 +188,53 @@ export interface ExpensesRepository {
    * wszystkich rekordów.
    */
   getMonthlyIncomeTotal(month: YearMonth): Promise<number>;
+
+  // --- Analiza (Etap 12) ---
+
+  /**
+   * Wszystkie płatności z ciągu miesięcy, od najstarszej do najnowszej.
+   *
+   * DLACZEGO SUROWE REKORDY, A NIE GOTOWE SUMY
+   *
+   * Kuszące było dołożyć tu metodę `getMonthlySeries(zakres, przedmiot)`
+   * i policzyć sumy w SQL. Odrzucone: przedmiotów analizy jest sześć rodzajów
+   * (rachunek, subskrypcja, podkategoria, kategoria główna, wszystko, dochody),
+   * więc zapytanie musiałoby sklejać warunek WHERE z typu przedmiotu — czyli
+   * reguła „co wchodzi do zestawienia" wylądowałaby w tekście SQL i nie dałoby
+   * się jej sprawdzić testem bez bazy.
+   *
+   * Przy skali domowego budżetu (kilkaset rekordów na rok) przeniesienie
+   * płatności do pamięci kosztuje tyle co nic, a cała matematyka analizy
+   * zostaje czystą funkcją w `src/features/analysis/`.
+   *
+   * BR-05 obowiązuje jak wszędzie: rachunki bez kwoty (`amountGrosze === null`)
+   * są tu zwracane, ale sumowanie ma je pominąć. Zwracamy je, bo zestawienie
+   * musi umieć powiedzieć „w marcu nie wpisałeś kwoty" — a tego nie da się
+   * odróżnić od „w marcu nie było rachunku", jeśli baza ich nie odda.
+   *
+   * Zakres obejmuje OBA skrajne miesiące.
+   */
+  listPaymentsForRange(from: YearMonth, to: YearMonth): Promise<Payment[]>;
+
+  /** Dochody domowników z ciągu miesięcy, chronologicznie. Zakres domknięty. */
+  listIncomesForRange(from: YearMonth, to: YearMonth): Promise<Income[]>;
+
+  // --- Zapisane zestawienia (Etap 13) ---
+
+  /** Zestawienia zapisane przez użytkownika, w kolejności ustawionej na liście. */
+  listSavedReports(): Promise<SavedReport[]>;
+
+  createSavedReport(input: NewSavedReport): Promise<SavedReport>;
+  updateSavedReport(id: number, patch: SavedReportPatch): Promise<SavedReport>;
+
+  /**
+   * Zapisane zestawienie kasujemy NAPRAWDĘ, a nie ukrywamy jak kategorie (7.5).
+   *
+   * Reguła „nie kasuj, wyłącz" chroni historię: usunięta kategoria zabrałaby
+   * ze sobą sens zapisanych wydatków. Zestawienie nie jest niczyim rodzicem —
+   * to zapamiętane pytanie, nie dane. Nic nie osieroci.
+   */
+  deleteSavedReport(id: number): Promise<void>;
 
   // --- Kopia zapasowa (Etap 10) ---
 

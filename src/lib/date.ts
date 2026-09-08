@@ -36,6 +36,28 @@ export const MONTH_NAMES = [
   'Grudzień',
 ] as const;
 
+/**
+ * Skróty miesięcy do podpisów osi wykresu (Etap 12).
+ *
+ * Pełna nazwa („Październik") nie mieści się pod słupkiem o szerokości
+ * dwudziestu kilku pikseli, a ucięta w połowie („Paździer…") czyta się
+ * gorzej niż trzyliterowy skrót.
+ */
+export const MONTH_SHORT_NAMES = [
+  'sty',
+  'lut',
+  'mar',
+  'kwi',
+  'maj',
+  'cze',
+  'lip',
+  'sie',
+  'wrz',
+  'paź',
+  'lis',
+  'gru',
+] as const;
+
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
@@ -125,4 +147,37 @@ export function isSameMonth(a: YearMonth, b: YearMonth): boolean {
 export function dueDateFor(ym: YearMonth, dayOfMonth: number): IsoDate {
   const day = Math.min(Math.max(dayOfMonth, 1), daysInMonth(ym));
   return `${ym.year}-${pad2(ym.month)}-${pad2(day)}`;
+}
+
+/**
+ * Porównanie chronologiczne dwóch miesięcy.
+ * Ujemne, gdy `a` jest wcześniejszy; zero, gdy to ten sam miesiąc.
+ */
+export function compareYearMonth(a: YearMonth, b: YearMonth): number {
+  return a.year - b.year || a.month - b.month;
+}
+
+/**
+ * Pierwszy i ostatni dzień CIĄGU miesięcy (Etap 12: analiza).
+ *
+ * Odpowiednik `monthRange`, tylko rozciągnięty na zakres. Używane w SQL:
+ * `WHERE effectiveDate BETWEEN start AND end`. Zakres jest domknięty —
+ * miesiąc początkowy i końcowy wchodzą do wyniku.
+ *
+ * Gdy zakres podano „na opak" (koniec przed początkiem), zamieniamy końce
+ * miejscami zamiast zwracać pustkę. Użytkownik przestawiający miesiące
+ * strzałkami przechodzi przez taki stan po drodze i nie chcemy, żeby ekran
+ * migał wtedy pustym wykresem.
+ */
+export function monthSpan(from: YearMonth, to: YearMonth): { start: IsoDate; end: IsoDate } {
+  const [first, last] = compareYearMonth(from, to) <= 0 ? [from, to] : [to, from];
+  return { start: monthRange(first).start, end: monthRange(last).end };
+}
+
+/** Lista kolejnych miesięcy od `from` do `to` włącznie, chronologicznie. */
+export function monthsBetween(from: YearMonth, to: YearMonth): YearMonth[] {
+  const [first, last] = compareYearMonth(from, to) <= 0 ? [from, to] : [to, from];
+  const count = (last.year - first.year) * 12 + (last.month - first.month);
+
+  return Array.from({ length: count + 1 }, (_, index) => addMonths(first, index));
 }

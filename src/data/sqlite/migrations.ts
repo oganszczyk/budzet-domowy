@@ -132,6 +132,90 @@ export const MIGRATIONS: string[] = [
   -- Ekran główny pyta o dochody wybranego miesiąca przy każdym otwarciu.
   CREATE INDEX idx_income_month ON income(month);
   `,
+
+  // --- wersja 3: zapisane zestawienia + trwałe identyfikatory (Etap 13) ---
+  //
+  // Dwie zmiany w jednej migracji, celowo. Każda migracja to jeden moment,
+  // w którym coś może pójść nie tak na prawdziwych danych użytkownika —
+  // lepiej mieć jeden taki moment niż dwa.
+  //
+  // KOLUMNA `uuid` NIE WCHODZI DO MODELU DANYCH.
+  //
+  // Właściciel projektu potwierdził, że pojawi się drugi telefon, a przy
+  // synchronizacji `INTEGER AUTOINCREMENT` zawodzi: dwa urządzenia niezależnie
+  // utworzą wydatek o numerze 42 i jeden nadpisze drugi. Trwały identyfikator
+  // trzeba nadać ZANIM uzbiera się rok danych.
+  //
+  // Zatrzymujemy go jednak na poziomie bazy. Wciągnięcie `uuid` do typów
+  // `Payment`, `Category` i pozostałych wymusiłoby dopisanie go wszędzie tam,
+  // gdzie takie rekordy powstają — w danych demonstracyjnych, zasiewie,
+  // czytniku kopii zapasowej i kilkudziesięciu testach — dla pola, którego
+  // dziś nikt nie odczytuje. Kolumna czeka wypełniona; model i format kopii
+  // rozszerzymy dopiero wtedy, gdy powstanie prawdziwa synchronizacja.
+  //
+  // `ALTER TABLE ADD COLUMN` w SQLite przyjmuje wyłącznie stałą wartość
+  // domyślną, więc istniejące wiersze wypełniamy osobnym `UPDATE`
+  // (`randomblob` jest wyliczany dla każdego wiersza z osobna), a nowe —
+  // wyzwalaczem.
+  //
+  // WYZWALACZ, A NIE ZMIANA ZAPYTAŃ `INSERT`. Rekordy powstają w dziesięciu
+  // miejscach repozytorium, licząc odtwarzanie kopii zapasowej. Dopisanie
+  // kolumny do każdego z nich to dziesięć okazji, żeby o jednym zapomnieć —
+  // i to zapomnieć po cichu, bo brakujący identyfikator niczego nie psuje
+  // aż do dnia, w którym powstanie synchronizacja. Baza pilnuje tego sama,
+  // więc nie da się tego pominąć.
+  `
+  CREATE TABLE saved_report (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    -- Przedmiot analizy w zapisie subjectKey, np. 'BILL_TEMPLATE:3'.
+    subjectKey TEXT NOT NULL,
+    rangeMode TEXT NOT NULL,
+    -- Długość przesuwającego się okna; NULL dla trybu 'rok do roku'.
+    windowMonths INTEGER,
+    sortOrder INTEGER NOT NULL DEFAULT 0,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
+
+  ALTER TABLE category ADD COLUMN uuid TEXT;
+  ALTER TABLE bill_template ADD COLUMN uuid TEXT;
+  ALTER TABLE subscription ADD COLUMN uuid TEXT;
+  ALTER TABLE payment ADD COLUMN uuid TEXT;
+  ALTER TABLE income ADD COLUMN uuid TEXT;
+
+  UPDATE category SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL;
+  UPDATE bill_template SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL;
+  UPDATE subscription SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL;
+  UPDATE payment SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL;
+  UPDATE income SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL;
+
+  CREATE UNIQUE INDEX idx_category_uuid ON category(uuid);
+  CREATE UNIQUE INDEX idx_bill_template_uuid ON bill_template(uuid);
+  CREATE UNIQUE INDEX idx_subscription_uuid ON subscription(uuid);
+  CREATE UNIQUE INDEX idx_payment_uuid ON payment(uuid);
+  CREATE UNIQUE INDEX idx_income_uuid ON income(uuid);
+
+  CREATE TRIGGER trg_category_uuid AFTER INSERT ON category
+    WHEN new.uuid IS NULL
+    BEGIN UPDATE category SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_bill_template_uuid AFTER INSERT ON bill_template
+    WHEN new.uuid IS NULL
+    BEGIN UPDATE bill_template SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_subscription_uuid AFTER INSERT ON subscription
+    WHEN new.uuid IS NULL
+    BEGIN UPDATE subscription SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_payment_uuid AFTER INSERT ON payment
+    WHEN new.uuid IS NULL
+    BEGIN UPDATE payment SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_income_uuid AFTER INSERT ON income
+    WHEN new.uuid IS NULL
+    BEGIN UPDATE income SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
+  `,
 ];
 
 /** Wersja schematu, do której doprowadzają wszystkie migracje. */

@@ -220,7 +220,7 @@ na 11,97 zł zapisałby się jako 2,24 zł.
 ## Etap 8 — analiza jako placeholder ✅ ZAKOŃCZONY
 
 - [x] Dodać ekran z informacją o przyszłym module
-- [ ] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji
+- [x] P2 Wdrożyć analizy dopiero po dostarczeniu osobnej specyfikacji — patrz Etap 12
 
 Ekran istnieje od Etapu 0 i celowo pozostaje pusty — 5.9 wymaga osobnej
 specyfikacji przed wdrożeniem wykresów.
@@ -423,23 +423,20 @@ Migracja schematu 1 → 2 przeszła na prawdziwym urządzeniu z prawdziwymi
 danymi, nie tylko w teście. To domyka zasadę 5 z `AGENTS.md` w praktyce:
 aktualizacja aplikacji nie kasuje bazy.
 
-### Niesprawdzone na urządzeniu: ODTWARZANIE kopii
+### ODTWARZANIE kopii — potwierdzone na urządzeniu 04.09.2026
 
-Zapisywanie kopii jest potwierdzone, odtwarzanie NIE. To jedyna funkcja
-w aplikacji, której nie da się sprawdzić bez ryzyka — odtworzenie zastępuje
-całą zawartość, więc nieudana próba kosztuje dane.
-
-Zanim ktokolwiek uzna kopię zapasową za działającą, trzeba sprawdzić
-odtwarzanie. Bezpieczna kolejność:
+Przez dwa tygodnie była to jedyna funkcja aplikacji bez dowodu z urządzenia,
+i jedyna, której nieudana próba kosztuje dane — odtworzenie zastępuje całą
+zawartość. Sprawdzone przy okazji instalacji builda z Etapem 12, w bezpiecznej
+kolejności:
 
 1. zapisać świeżą kopię i wysłać plik poza telefon,
 2. dopiero wtedy uruchomić odtwarzanie ze wskazaniem tego pliku,
 3. sprawdzić, czy sumy i historia wróciły w komplecie.
 
-Do tego czasu kopia zapasowa jest potwierdzona TYLKO w połowie: wiemy, że
-plik powstaje i zawiera dane (ekran pokazuje liczby rekordów), ale nie mamy
-dowodu z urządzenia, że da się z niego wrócić. Testy kontraktu i formatu
-pokrywają obie strony, więc ryzyko jest niskie — ale nie zerowe.
+**Działa.** Ta kolejność zostaje tu opisana nie jako zaległość, tylko jako
+instrukcja na przyszłość: odtwarzanie bez wcześniejszej kopii poza telefonem
+jest ryzykowne niezależnie od tego, ile razy zadziałało wcześniej.
 
 ## Publikacja na GitHubie — 27.08.2026
 
@@ -497,6 +494,283 @@ wydatku ucina ostatnią cyfrę roku (`27.08.202`). Dane są poprawne, to obcięc
 przy rysowaniu na Androidzie. Wcześniejsza poprawka (`flexShrink: 0`) nie
 wystarczyła. Nie odtwarza się w wersji webowej — wymaga sprawdzenia
 na urządzeniu.
+
+## Etap 12 — analiza: propozycje i własne zestawienia ✅ ZAKOŃCZONY
+
+Rozszerzenie poza pierwotną specyfikację. 5.9 zostawiło ten ekran pusty
+„do czasu osobnej specyfikacji" i wymagało jedynie, żeby architektura miała
+miejsce „na filtrowanie analiz po miesiącu i kategorii". Zakres ustalił
+właściciel projektu 27.08.2026, potwierdził przed wdrożeniem; zbudowane
+04.09.2026.
+
+**UWAGA: ten etap wyszedł inaczej, niż zakładał `docs/PLAN-DALSZY.md`.**
+Plan z 21.08.2026 dzielił pracę na trzy etapy: 12 (porównanie miesiąc do
+miesiąca, bez wykresów), 13 (własne zestawienia), 14 (przebieg w czasie).
+Decyzje właściciela z 27.08 przestawiły ten podział — przebieg w czasie
+i kreator własnego zestawienia weszły od razu, a zapisywanie zostało
+odłożone. Numeracja etapów w `PLAN-DALSZY.md` jest więc nieaktualna;
+obowiązuje ta z tego pliku.
+
+- [x] `AnalysisSubject` — sześć rodzajów przedmiotu analizy (`src/domain/analysis.ts`)
+- [x] `listPaymentsForRange` / `listIncomesForRange` w obu implementacjach + 6 testów kontraktu
+- [x] Szereg miesięczny, podsumowanie i porównanie lat jako czyste funkcje + 17 testów
+- [x] Propozycje dobierane do danych + 14 testów reguł wyboru
+- [x] Wykres słupkowy (`src/ui/components/bar-chart.tsx`)
+- [x] Ekran „Analiza": trzy propozycje i jedno wejście do kreatora
+- [x] Ekran `/analysis/report`: wybór pozycji i zakresu, wynik na żywo
+
+### Cztery decyzje właściciela projektu (27.08.2026)
+
+| Pytanie                      | Decyzja                             |
+| ---------------------------- | ----------------------------------- |
+| Ile pozycji naraz            | jedna, porównywana w czasie         |
+| Jakie zakresy czasu          | rok do roku ORAZ własny od-do       |
+| Zapisywanie zestawień        | dopiero po sprawdzeniu na telefonie |
+| Propozycje stałe czy zmienne | dobierane do danych                 |
+
+Świadomie NIE ma przycisków „ostatnie 6 miesięcy" ani „ostatnie 12 miesięcy":
+własny zakres obejmuje oba, a każdy dodatkowy przycisk to kolejna rzecz do
+przeczytania na ekranie, który ma być czysty.
+
+### „Gaz" nie jest kategorią — dlatego powstał AnalysisSubject
+
+Gaz, Prąd i Woda należą do JEDNEJ kategorii „Rachunki domowe" (BR-02 wymaga
+podkategorii wyłącznie dla zakupów), a rozróżnia je `billTemplateId`. Analiza
+filtrująca po samym `categoryId` nie umiałaby odpowiedzieć na pytanie
+„ile płacę za gaz" — czyli na pytanie, od którego ten ekran się zaczął.
+
+`AnalysisSubject` to typ rozłączny mówiący, PO KTÓREJ KOLUMNIE filtrujemy:
+wszystkie wydatki, kategoria główna, rachunek cykliczny, subskrypcja,
+podkategoria albo dochody.
+
+### Repozytorium oddaje surowe rekordy, nie gotowe sumy
+
+Kusiło dołożyć `getMonthlySeries(zakres, przedmiot)` i policzyć sumy w SQL.
+Odrzucone: przedmiotów analizy jest sześć rodzajów, więc zapytanie sklejałoby
+warunek `WHERE` z typu przedmiotu — reguła „co wchodzi do zestawienia"
+wylądowałaby w tekście SQL i nie dałoby się jej sprawdzić testem bez bazy.
+
+Przy skali domowego budżetu (kilkaset rekordów na rok) przeniesienie płatności
+do pamięci kosztuje tyle co nic, a cała matematyka zostaje czystą funkcją.
+Bez zmiany schematu, więc bez migracji.
+
+### Trzy reguły, w których łatwo o ciche kłamstwo
+
+1. **Średnia dzieli przez miesiące Z DANYMI, nie przez długość zakresu.**
+   Trzy rachunki za gaz w zakresie sześciomiesięcznym podzielone przez sześć
+   dają liczbę o połowę za niską — a użytkownik czyta ją jako „tyle płacę
+   miesięcznie". Miesiąc, w którym rachunku nie było, nie jest miesiącem,
+   w którym rachunek wyniósł zero.
+
+2. **Rok do roku porównuje tyle samo miesięcy po obu stronach.** W sierpniu
+   bieżący rok ma osiem miesięcy, a poprzedni dwanaście. Zestawienie wprost
+   pokazałoby spadek o jedną trzecią w każdej kategorii — nieprawdę, i to
+   nieprawdę wyglądającą na dobrą wiadomość.
+
+3. **Zakupy porównujemy do ostatniego ZAMKNIĘTEGO miesiąca.** Rachunek zna
+   swoją kwotę w chwili powstania, więc trwający miesiąc jest dla niego pełny.
+   Zakupy zbierają się przez cały miesiąc, więc porównanie trwającego miesiąca
+   ze średnią zawsze wychodziłoby „taniej niż zwykle" — fałszywa dobra
+   wiadomość, pokazywana codziennie.
+
+Dodatkowo miesiąc PUSTY jest odróżniony od miesiąca ZEROWEGO: rachunek bez
+wpisanej kwoty (BR-05) nie wchodzi do sumy, ale jest liczony osobno i ekran
+mówi wprost, ile takich rekordów siedzi w zakresie.
+
+### Propozycja musi kosztować, nie tylko procentowo drgnąć
+
+Kandydat trafia na ekran, gdy przekroczy OBA progi naraz: 20% odchylenia
+od własnej średniej i 20 zł różnicy. Sam procent zgłaszałby kawę, która
+podrożała z 8 na 12 zł. Sama złotówka zgłaszałaby czynsz, który drgnął o 30 zł
+na 2 500 zł. Kolejność propozycji ustala ZŁOTÓWKA, nie procent — bo to
+złotówki wychodzą z portfela.
+
+Propozycji zapasowych jest cztery, a miejsc trzy. Nadmiar jest celowy:
+„największy rachunek" odpada przy pustej bazie, a ekran i tak musi się zapełnić.
+
+### Dwa błędy znalezione dopiero na działających danych
+
+Testy jednostkowe przechodziły; oba wyszły przy klikaniu po ekranie.
+
+1. **Podsumowanie liczyło się z innego zakresu niż wykres.** W trybie „rok do
+   roku" pobieramy oba pełne lata, a pokazujemy tylko miesiące wchodzące do
+   porównania. Podsumowanie liczone z całości podawało „najtaniej: listopad" —
+   miesiąc nieobecny ani na wykresie, ani na liście pod nim. Poprawka: liczymy
+   z tego, co widać.
+
+2. **Wykres kulił się do lewej połowy karty.** Szerokość słupka liczyliśmy
+   z `onLayout`, a to zdarzenie nie zawsze dociera (po odświeżeniu kodu w locie
+   nie dociera nigdy) — stan zostawał na zerze i sześć słupków schodziło do
+   minimalnych 22 pikseli. Poprawka: nie mierzymy nic. Kolumny mają `flex: 1`
+   i `minWidth`, zawartość przewijanego obszaru `flexGrow: 1`; szerokość liczy
+   silnik układu. Mało słupków — dzielą całą szerokość; dużo — wykres przewija
+   się w bok.
+
+### Sprawdzone na działających danych (wersja webowa, 04.09.2026)
+
+Dziewięć zakupów rozrzuconych po miesiącach od lipca 2025 do sierpnia 2026.
+
+| Sprawdzenie                         | Wynik                                                            |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| Pusta baza                          | trzy propozycje zapasowe, ekran nie jest pusty                   |
+| Propozycja dobrana do danych        | „Jedzenie — Lipiec 2026: o 20% taniej niż zwykle"                |
+| Odniesienie dla zakupów             | lipiec (zamknięty), nie sierpień (trwający)                      |
+| Kliknięcie propozycji               | otwiera kreator z wypełnioną pozycją i zakresem                  |
+| Zakres własny III–VIII 2026         | suma 3 825,00 zł, średnia 637,50 zł, najdrożej sierpień          |
+| Rok do roku                         | 4 475,00 zł kontra 505,00 zł, „pierwsze 8 miesięcy każdego roku" |
+| Wysokości słupków                   | proporcjonalne (480 zł → 77 px przy 930 zł → 150 px)             |
+| Sześć słupków na telefonie (375 px) | 45 px szerokości, wypełniają kartę                               |
+| Szesnaście słupków                  | 22 px, wykres przewija się w bok (480 px treści na 309 px)       |
+| Odwrócony zakres                    | niemożliwy — kraniec ciągnie drugi za sobą                       |
+| Rachunki bez danych                 | komunikat zamiast pustego wykresu                                |
+
+### Czego Etap 12 NIE robi
+
+Nie zapisuje zestawień. Zbudowane zestawienie znika po wyjściu z ekranu.
+To decyzja świadoma: najpierw sprawdzamy na telefonie, czy takie zestawienia
+są w ogóle użyteczne, a dopiero potem dokładamy tabelę, migrację schematu
+do wersji 3 i objęcie kopią zapasową (format pliku wersja 3).
+
+### Sprawdzone na fizycznym telefonie — 04.09.2026
+
+Build `preview` z commita `3207260`, zainstalowany na wierzchu poprzedniej
+wersji, ten sam klucz podpisujący `Q8cjR6jgTR`.
+
+| Co                                         | Wynik                                |
+| ------------------------------------------ | ------------------------------------ |
+| Dane z poprzedniej wersji po aktualizacji  | ✅ na miejscu                        |
+| Zapisanie kopii zapasowej i wysłanie pliku | ✅ działa                            |
+| Ekran analizy — trzy propozycje            | ✅ działa                            |
+| Wykres i przewijanie w bok w trybie roku   | ✅ działa                            |
+| Odtworzenie kopii zapasowej                | ✅ działa (patrz Etap 10)            |
+| Podpisy pod słupkami                       | ❌ ucinane do kropek — opisane niżej |
+
+Obawa o poziome przewijanie wewnątrz pionowo przewijanego ekranu okazała się
+nieuzasadniona — na Androidzie działa.
+
+### Usterka do naprawy: ucinane podpisy osi
+
+Zgłoszenie właściciela projektu: pod słupkami „wszędzie kropki".
+
+Przyczyna NIE jest tam, gdzie się wydaje. Nazwy miesięcy są już trzyliterowe
+(`MONTH_SHORT_NAMES`); nie mieści się **rok** pod pierwszym słupkiem.
+Zmierzone w czcionce podpisów przy `MIN_BAR_WIDTH` = 22 px:
+
+| Podpis | Szerokość | Mieści się w 22 px |
+| ------ | --------- | ------------------ |
+| `lis`  | 11,4 px   | tak, z zapasem     |
+| `maj`  | 20,0 px   | ledwo              |
+| `mar`  | 21,3 px   | 0,7 px zapasu      |
+| `2026` | 26,7 px   | **nie**            |
+
+Trzyliterowe miesiące mieszczą się w przeglądarce, ale `mar` i `maj` mają
+zapas mniejszy niż jeden piksel — na Androidzie, z inną czcionką systemową,
+też się urywają. Stąd wrażenie, że kropki są wszędzie, choć zaczyna się
+od samego roku.
+
+Naprawa to jedna stała: `MIN_BAR_WIDTH` z 22 na około 32 px, czyli tyle,
+żeby najszerszy podpis mieścił się z zapasem. Kosztuje to tylko tyle, że
+mniej słupków widać naraz — wykres i tak się przewija.
+
+To NIE jest ta sama usterka co zgłoszenie
+[#4](https://github.com/oganszczyk/budzet-domowy/issues/4). Tam tekst gubi
+ostatni znak przy rysowaniu mimo dostępnego miejsca; tutaj miejsca po prostu
+nie ma i system uczciwie sygnalizuje to wielokropkiem.
+
+## Etap 13 — zapisywanie własnych zestawień ✅ ZAKOŃCZONY
+
+- [x] Poszerzyć `MIN_BAR_WIDTH` w `bar-chart.tsx` (usterka ucinanych podpisów)
+- [x] Kolumna `uuid` — trwałe identyfikatory pod przyszłą synchronizację
+- [x] Tabela `saved_report` i migracja schematu do wersji 3
+- [x] Nazwa zestawienia i zapis z ekranu kreatora
+- [x] Zapisane zestawienia na ekranie „Analiza", pod propozycjami
+- [x] Objęcie kopią zapasową (format pliku wersja 3)
+- [x] Odmiana miesięcy przez liczbę (`src/lib/plural.ts`)
+
+### Zapisujemy DŁUGOŚĆ okna, nie wybrane miesiące
+
+Decyzja właściciela projektu (04.09.2026). Zestawienie pamiętające
+„marzec–sierpień 2026" byłoby za miesiąc migawką z przeszłości — a zakłada się
+je raz i zagląda co miesiąc. Zapisujemy więc „ostatnie sześć miesięcy",
+a konkretne miesiące wyliczamy dopiero przy otwarciu, względem dzisiaj.
+
+Ekran mówi o tym wprost PRZED zapisem. Bez tego zdania użytkownik byłby
+przekonany, że zapisał marzec–sierpień, i uznałby przesunięcie za usterkę.
+
+Przedmiot analizy trzymamy jako `subjectKey` („BILL_TEMPLATE:3"), czyli ten sam
+tekst, którym posługuje się adres ekranu. Rozbicie go na kolumny kusiło, ale
+nie da się tego zrobić jedną kolumną liczbową: wariant `MAIN_TYPE` niesie
+napis, a nie identyfikator. Dwie kolumny o zmiennym znaczeniu byłyby gorsze
+niż jeden tekst, który ma już funkcje zapisu i odczytu wraz z testami.
+
+### Kolumna `uuid` NIE weszła do modelu danych
+
+Właściciel potwierdził, że pojawi się drugi telefon, a przy synchronizacji
+`INTEGER AUTOINCREMENT` zawodzi: dwa urządzenia niezależnie utworzą wydatek
+o numerze 42 i jeden nadpisze drugi. Trwały identyfikator trzeba nadać, zanim
+uzbiera się rok danych.
+
+Wcześniejsza ocena („kilka linijek") była prawdziwa wyłącznie na poziomie SQL.
+Wciągnięcie `uuid` do typów `Payment`, `Category` i pozostałych wymusiłoby
+dopisanie go **wszędzie, gdzie takie rekordy powstają** — w danych
+demonstracyjnych, zasiewie, czytniku kopii zapasowej i kilkudziesięciu
+testach — dla pola, którego dziś nikt nie odczytuje.
+
+Kolumna została więc na poziomie bazy. Istniejące wiersze dostały wartość przy
+migracji, a nowe dostają ją z WYZWALACZA, nie ze zmiany zapytań `INSERT`.
+Rekordy powstają w dziesięciu miejscach repozytorium, licząc odtwarzanie kopii;
+to dziesięć okazji, żeby o jednym zapomnieć — i to po cichu, bo brakujący
+identyfikator niczego nie psuje aż do dnia, w którym powstanie synchronizacja.
+
+Skala tej różnicy jest widoczna w liczbach: rozszerzenie migawki kopii
+zapasowej o zapisane zestawienia wymagało poprawienia **trzech** miejsc
+w testach. Ta sama operacja dla `uuid` na pięciu encjach dotknęłaby ich
+kilkudziesięciu.
+
+Model i format kopii rozszerzymy dopiero wtedy, gdy powstanie prawdziwa
+synchronizacja — do tego czasu kolumna czeka wypełniona.
+
+### Trzy formy liczby mnogiej
+
+„Ostatnie 3 miesięcy" albo „ostatnie 22 miesiące" to nie jest drobiazg
+kosmetyczny — tak pisze automat, nie aplikacja, której powierza się domowy
+budżet. `src/lib/plural.ts` wybiera formę wg reguły polskiej, z wyjątkiem
+na nastolatki (12–14 idą do „miesięcy" mimo końcówki 2–4). Test przechodzi
+wszystkie dopuszczalne długości okna od 2 do 36.
+
+### Zestawienie kasujemy NAPRAWDĘ
+
+7.5 każe kategorie z historią ukrywać, a nie kasować — usunięta kategoria
+zabrałaby ze sobą sens zapisanych wydatków. Zestawienie niczego nie osieroci:
+to zapamiętane pytanie, nie dane. Kasujemy je fizycznie, po potwierdzeniu.
+
+### Sprawdzone w działającej aplikacji
+
+| Sprawdzenie                                 | Wynik                                            |
+| ------------------------------------------- | ------------------------------------------------ |
+| Pusta nazwa                                 | zapis zablokowany                                |
+| Nazwa zajęta, inna wielkość liter           | zapis zablokowany                                |
+| Zapis i pojawienie się na liście            | „Wszystkie wydatki · ostatnie 6 miesięcy"        |
+| Otwarcie zapisanego zestawienia we wrześniu | zakres kwiecień–wrzesień, przeliczony od dzisiaj |
+| Odmowa w pytaniu o usunięcie                | zestawienie zostaje                              |
+| Potwierdzenie usunięcia                     | znika razem z całą sekcją                        |
+| Migracja 1 → 3 na danych                    | wydatek nietknięty, identyfikatory nadane        |
+
+**Do sprawdzenia na fizycznym telefonie:** czy poszerzenie słupka faktycznie
+usuwa wielokropki pod osią. Pomiar mówi, że tak (najszerszy podpis 26,7 px
+przy słupku 32 px), ale wielokropki wyszły właśnie z różnicy między czcionką
+przeglądarki a systemową czcionką Androida.
+
+## Etap 14 — do rozstrzygnięcia 🔜
+
+Kolejność zależy od tego, co uwiera po kilku tygodniach używania. Kandydaci
+z `docs/PLAN-DALSZY.md`, w kolejności wartości do kosztu:
+
+- [ ] Powiadomienia przed terminem rachunku — jedyna funkcja, która sama się
+      spłaca; rachunki mają `dueDate`, a aplikacja nic z tym nie robi
+- [ ] Przypomnienie o kopii zapasowej („nie robiłeś kopii od 30 dni")
+- [ ] Automatyczna kategoryzacja po nazwie sklepu
+- [ ] Limity dla kategorii („Jedzenie maksymalnie 1 500 zł")
 
 ## Odstępstwa od specyfikacji
 

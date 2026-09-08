@@ -7,6 +7,7 @@
  * była możliwa właśnie dzięki temu szwowi.
  */
 
+import type { SavedReport } from '@/domain/analysis';
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
@@ -18,7 +19,14 @@ import type {
   Payment,
   Subscription,
 } from '@/domain/models';
-import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
+import {
+  monthRange,
+  monthSpan,
+  todayIso,
+  yearMonthKey,
+  yearMonthOf,
+  type YearMonth,
+} from '@/lib/date';
 
 import type {
   BillAmountHistoryEntry,
@@ -30,8 +38,10 @@ import type {
   NewCategory,
   NewIncome,
   NewPayment,
+  NewSavedReport,
   NewSubscription,
   PaymentPatch,
+  SavedReportPatch,
   SubscriptionPatch,
 } from '../repository';
 import type { SqlDatabase, SqlParam } from './database';
@@ -104,6 +114,17 @@ type IncomeRow = {
   updatedAt: string;
 };
 
+type SavedReportRow = {
+  id: number;
+  name: string;
+  subjectKey: string;
+  rangeMode: string;
+  windowMonths: number | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** SQLite nie zna typu boolean — zapisujemy 0/1. */
 const toDbBool = (value: boolean): number => (value ? 1 : 0);
 const fromDbBool = (value: number): boolean => value === 1;
@@ -115,6 +136,9 @@ const PAYMENT_COLUMNS = `
 `;
 
 const INCOME_COLUMNS = 'id, personName, amountGrosze, month, createdAt, updatedAt';
+
+const SAVED_REPORT_COLUMNS =
+  'id, name, subjectKey, rangeMode, windowMonths, sortOrder, createdAt, updatedAt';
 
 export class SqliteExpensesRepository implements ExpensesRepository {
   constructor(private readonly db: SqlDatabase) {}
@@ -709,6 +733,120 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     return row?.total ?? 0;
   }
 
+  // --- Analiza (Etap 12) ---
+
+  async listPaymentsForRange(from: YearMonth, to: YearMonth): Promise<Payment[]> {
+    const { start, end } = monthSpan(from, to);
+
+    // Kolejność od najstarszej płatności, odwrotnie niż w historii (5.7).
+    // Zestawienie czyta się od lewej do prawej wzdłuż osi czasu, więc dane
+    // przychodzą już w kolejności, w jakiej trafią na wykres.
+    const rows = await this.db.all<PaymentRow>(
+      `SELECT ${PAYMENT_COLUMNS} FROM payment
+       WHERE effectiveDate BETWEEN ? AND ?
+       ORDER BY effectiveDate ASC, id ASC`,
+      [start, end]
+    );
+    return rows.map((row) => this.toPayment(row));
+  }
+
+  async listIncomesForRange(from: YearMonth, to: YearMonth): Promise<Income[]> {
+    // Kolumna `month` trzyma „RRRR-MM", czyli pierwsze siedem znaków daty ISO.
+    // Obcięcie krańców zakresu do tej samej długości pozwala porównać je
+    // wprost, bez żadnej konwersji po stronie SQL.
+    const { start, end } = monthSpan(from, to);
+
+    const rows = await this.db.all<IncomeRow>(
+      `SELECT ${INCOME_COLUMNS} FROM income
+       WHERE month BETWEEN ? AND ?
+       ORDER BY month ASC, id ASC`,
+      [start.slice(0, 7), end.slice(0, 7)]
+    );
+    return rows.map((row) => this.toIncome(row));
+  }
+
+  // --- Zapisane zestawienia (Etap 13) ---
+
+  private toSavedReport(row: SavedReportRow): SavedReport {
+    return {
+      id: row.id,
+      name: row.name,
+      subjectKey: row.subjectKey,
+      // Baza trzyma zwykły tekst; typ zawęża go dopiero tutaj.
+      rangeMode: row.rangeMode as SavedReport['rangeMode'],
+      windowMonths: row.windowMonths,
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  async listSavedReports(): Promise<SavedReport[]> {
+    const rows = await this.db.all<SavedReportRow>(
+      `SELECT ${SAVED_REPORT_COLUMNS} FROM saved_report ORDER BY sortOrder ASC, id ASC`
+    );
+    return rows.map((row) => this.toSavedReport(row));
+  }
+
+  async createSavedReport(input: NewSavedReport): Promise<SavedReport> {
+    const now = new Date().toISOString();
+
+    // Nowe zestawienia trafiają na koniec listy, tak samo jak podkategorie.
+    const max = await this.db.first<{ maxOrder: number | null }>(
+      'SELECT MAX(sortOrder) AS maxOrder FROM saved_report'
+    );
+    const sortOrder = input.sortOrder ?? (max?.maxOrder ?? 0) + 1;
+
+    const result = await this.db.run(
+      `INSERT INTO saved_report
+         (name, subjectKey, rangeMode, windowMonths, sortOrder, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [input.name, input.subjectKey, input.rangeMode, input.windowMonths, sortOrder, now, now]
+    );
+
+    const created = await this.getSavedReport(result.lastInsertRowId);
+    if (!created) throw new Error('Nie udało się zapisać zestawienia.');
+    return created;
+  }
+
+  private async getSavedReport(id: number): Promise<SavedReport | null> {
+    const row = await this.db.first<SavedReportRow>(
+      `SELECT ${SAVED_REPORT_COLUMNS} FROM saved_report WHERE id = ?`,
+      [id]
+    );
+    return row ? this.toSavedReport(row) : null;
+  }
+
+  async updateSavedReport(id: number, patch: SavedReportPatch): Promise<SavedReport> {
+    const current = await this.getSavedReport(id);
+    if (!current) throw new Error(`Nie znaleziono zestawienia o id ${id}.`);
+
+    const next = { ...current, ...patch };
+
+    await this.db.run(
+      `UPDATE saved_report
+         SET name = ?, subjectKey = ?, rangeMode = ?, windowMonths = ?, sortOrder = ?, updatedAt = ?
+       WHERE id = ?`,
+      [
+        next.name,
+        next.subjectKey,
+        next.rangeMode,
+        next.windowMonths,
+        next.sortOrder,
+        new Date().toISOString(),
+        id,
+      ]
+    );
+
+    const updated = await this.getSavedReport(id);
+    if (!updated) throw new Error(`Nie znaleziono zestawienia o id ${id}.`);
+    return updated;
+  }
+
+  async deleteSavedReport(id: number): Promise<void> {
+    await this.db.run('DELETE FROM saved_report WHERE id = ?', [id]);
+  }
+
   // --- Kopia zapasowa (Etap 10) ---
 
   /**
@@ -747,6 +885,9 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const incomeRows = await this.db.all<IncomeRow>(
       `SELECT ${INCOME_COLUMNS} FROM income ORDER BY id`
     );
+    const savedReportRows = await this.db.all<SavedReportRow>(
+      `SELECT ${SAVED_REPORT_COLUMNS} FROM saved_report ORDER BY id`
+    );
     const generatedRows = await this.db.all<GeneratedRecord>(
       `SELECT sourceType, sourceId, year, month
          FROM generated_record ORDER BY sourceType, sourceId, year, month`
@@ -758,6 +899,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       billTemplates: billTemplateRows.map((row) => this.toBillTemplate(row)),
       subscriptions: subscriptionRows.map((row) => this.toSubscription(row)),
       incomes: incomeRows.map((row) => this.toIncome(row)),
+      savedReports: savedReportRows.map((row) => this.toSavedReport(row)),
       generatedRecords: generatedRows.map((row) => ({
         sourceType: row.sourceType,
         sourceId: row.sourceId,
@@ -785,6 +927,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     try {
       await this.db.exec(`
         DELETE FROM generated_record;
+        DELETE FROM saved_report;
         DELETE FROM income;
         DELETE FROM payment;
         DELETE FROM bill_template;
@@ -892,6 +1035,24 @@ export class SqliteExpensesRepository implements ExpensesRepository {
             income.month,
             income.createdAt,
             income.updatedAt,
+          ]
+        );
+      }
+
+      for (const report of snapshot.savedReports) {
+        await this.db.run(
+          `INSERT INTO saved_report
+             (id, name, subjectKey, rangeMode, windowMonths, sortOrder, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            report.id,
+            report.name,
+            report.subjectKey,
+            report.rangeMode,
+            report.windowMonths,
+            report.sortOrder,
+            report.createdAt,
+            report.updatedAt,
           ]
         );
       }

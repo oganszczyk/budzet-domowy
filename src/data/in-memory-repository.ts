@@ -10,6 +10,7 @@
  * SQLite (Etap 1, scenariusz T-16).
  */
 
+import type { SavedReport } from '@/domain/analysis';
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
@@ -21,7 +22,14 @@ import type {
   Payment,
   Subscription,
 } from '@/domain/models';
-import { monthRange, todayIso, yearMonthKey, yearMonthOf, type YearMonth } from '@/lib/date';
+import {
+  monthRange,
+  monthSpan,
+  todayIso,
+  yearMonthKey,
+  yearMonthOf,
+  type YearMonth,
+} from '@/lib/date';
 
 import { buildDemoData } from './demo-data';
 import type {
@@ -34,8 +42,10 @@ import type {
   NewCategory,
   NewIncome,
   NewPayment,
+  NewSavedReport,
   NewSubscription,
   PaymentPatch,
+  SavedReportPatch,
   SubscriptionPatch,
 } from './repository';
 
@@ -46,6 +56,9 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   private subscriptions: Subscription[] = [];
   /** Etap 11: dochody domowników. */
   private incomes: Income[] = [];
+  /** Etap 13: zestawienia zapisane przez użytkownika. */
+  private savedReports: SavedReport[] = [];
+  private nextSavedReportId = 1;
   private nextPaymentId = 1;
   private nextBillTemplateId = 1;
   /**
@@ -85,6 +98,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     }));
     this.incomes = [];
     this.nextIncomeId = 1;
+    this.savedReports = [];
+    this.nextSavedReportId = 1;
     this.nextSubscriptionId = 1;
     this.subscriptions = demo.subscriptions.map((subscription) => ({
       ...subscription,
@@ -420,6 +435,68 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       .reduce((total, i) => total + i.amountGrosze, 0);
   }
 
+  // --- Analiza (Etap 12) ---
+
+  async listPaymentsForRange(from: YearMonth, to: YearMonth): Promise<Payment[]> {
+    const { start, end } = monthSpan(from, to);
+
+    return this.payments
+      .filter((p) => p.effectiveDate >= start && p.effectiveDate <= end)
+      .map((p) => this.withComputedStatus(p))
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || a.id - b.id);
+  }
+
+  async listIncomesForRange(from: YearMonth, to: YearMonth): Promise<Income[]> {
+    // Dochód zna tylko miesiąc („RRRR-MM"), więc obcinamy daty skrajne
+    // do siedmiu znaków. To ten sam zapis, więc porównanie tekstowe
+    // jest jednocześnie porównaniem chronologicznym.
+    const { start, end } = monthSpan(from, to);
+    const firstKey = start.slice(0, 7);
+    const lastKey = end.slice(0, 7);
+
+    return this.incomes
+      .filter((i) => i.month >= firstKey && i.month <= lastKey)
+      .sort((a, b) => a.month.localeCompare(b.month) || a.id - b.id);
+  }
+
+  // --- Zapisane zestawienia (Etap 13) ---
+
+  async listSavedReports(): Promise<SavedReport[]> {
+    return [...this.savedReports].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+
+  async createSavedReport(input: NewSavedReport): Promise<SavedReport> {
+    const now = new Date().toISOString();
+    const maxSortOrder = this.savedReports.reduce((max, r) => Math.max(max, r.sortOrder), 0);
+
+    const report: SavedReport = {
+      ...input,
+      id: this.nextSavedReportId++,
+      sortOrder: input.sortOrder ?? maxSortOrder + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.savedReports.push(report);
+    return report;
+  }
+
+  async updateSavedReport(id: number, patch: SavedReportPatch): Promise<SavedReport> {
+    const index = this.savedReports.findIndex((r) => r.id === id);
+    if (index === -1) throw new Error(`Nie znaleziono zestawienia o id ${id}.`);
+
+    const updated: SavedReport = {
+      ...this.savedReports[index],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    this.savedReports[index] = updated;
+    return updated;
+  }
+
+  async deleteSavedReport(id: number): Promise<void> {
+    this.savedReports = this.savedReports.filter((r) => r.id !== id);
+  }
+
   // --- Kopia zapasowa (Etap 10) ---
 
   /**
@@ -437,6 +514,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       billTemplates: this.billTemplates.map((t) => ({ ...t })),
       subscriptions: this.subscriptions.map((s) => ({ ...s })),
       incomes: this.incomes.map((i) => ({ ...i })),
+      savedReports: this.savedReports.map((r) => ({ ...r })),
       generatedRecords: [
         ...this.readGenerationKeys(this.generatedBills, 'BILL'),
         ...this.readGenerationKeys(this.generatedSubscriptionPayments, 'SUBSCRIPTION'),
@@ -450,6 +528,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.billTemplates = snapshot.billTemplates.map((t) => ({ ...t }));
     this.subscriptions = snapshot.subscriptions.map((s) => ({ ...s }));
     this.incomes = snapshot.incomes.map((i) => ({ ...i }));
+    this.savedReports = snapshot.savedReports.map((r) => ({ ...r }));
 
     this.generatedBills = new Set(
       snapshot.generatedRecords
@@ -472,6 +551,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.nextBillTemplateId = maxId(this.billTemplates) + 1;
     this.nextSubscriptionId = maxId(this.subscriptions) + 1;
     this.nextIncomeId = maxId(this.incomes) + 1;
+    this.nextSavedReportId = maxId(this.savedReports) + 1;
   }
 
   /** Rozkłada klucze rejestru z powrotem na rekordy `{ sourceId, rok, miesiąc }`. */

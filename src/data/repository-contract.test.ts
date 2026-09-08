@@ -6,7 +6,9 @@
  * w jednej wersji, ten plik by to wychwycił.
  */
 
+import { AnalysisRangeMode } from '@/domain/analysis';
 import { MainType, PaymentSource } from '@/domain/enums';
+import type { Payment } from '@/domain/models';
 import { addMonths, currentYearMonth, dueDateFor, todayIso, yearMonthKey } from '@/lib/date';
 
 import { InMemoryExpensesRepository } from './in-memory-repository';
@@ -504,11 +506,194 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
           subscriptions: [],
           generatedRecords: [],
           incomes: [],
+          savedReports: [],
         });
 
         expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(0);
         expect(await repo.listHistory()).toEqual([]);
         expect(await repo.listCategories()).toEqual([]);
+      });
+    });
+
+    /**
+     * Repozytorium pamięciowe startuje z danymi demonstracyjnymi, a SQLite
+     * z pustą tabelą płatności. Te testy porównują więc WYŁĄCZNIE rekordy,
+     * które same utworzyły — inaczej ten sam kontrakt nie mógłby przejść
+     * na obu implementacjach.
+     */
+    describe('Analiza (Etap 12)', () => {
+      const THREE_MONTHS_AGO = addMonths(THIS_MONTH, -3);
+      const TWO_MONTHS_AGO = addMonths(THIS_MONTH, -2);
+      const LAST_MONTH = addMonths(THIS_MONTH, -1);
+
+      /** Kwoty wyłącznie tych płatności, które utworzył sam test. */
+      function ownAmounts(found: Payment[], own: number[]) {
+        return found.filter((p) => own.includes(p.id)).map((p) => p.amountGrosze);
+      }
+
+      it('zakres obejmuje OBA skrajne miesiące i pomija sąsiadów', async () => {
+        const repo = await createRepository();
+        const outsideBefore = await addPurchase(repo, 1000, 15, THREE_MONTHS_AGO);
+        const first = await addPurchase(repo, 2000, 15, TWO_MONTHS_AGO);
+        const last = await addPurchase(repo, 3000, 15, LAST_MONTH);
+        const outsideAfter = await addPurchase(repo, 4000, 15, THIS_MONTH);
+        const own = [outsideBefore.id, first.id, last.id, outsideAfter.id];
+
+        const inRange = await repo.listPaymentsForRange(TWO_MONTHS_AGO, LAST_MONTH);
+
+        expect(ownAmounts(inRange, own)).toEqual([2000, 3000]);
+      });
+
+      it('zakres łapie też pierwszy i ostatni dzień skrajnych miesięcy', async () => {
+        const repo = await createRepository();
+        // Dzień 31 w krótszym miesiącu cofa się do ostatniego dnia (dueDateFor).
+        const firstDay = await addPurchase(repo, 1100, 1, LAST_MONTH);
+        const lastDay = await addPurchase(repo, 2200, 31, THIS_MONTH);
+        const own = [firstDay.id, lastDay.id];
+
+        const inRange = await repo.listPaymentsForRange(LAST_MONTH, THIS_MONTH);
+
+        expect(ownAmounts(inRange, own)).toEqual([1100, 2200]);
+      });
+
+      it('płatności przychodzą od najstarszej, odwrotnie niż w historii', async () => {
+        const repo = await createRepository();
+        const newest = await addPurchase(repo, 3000, 20, THIS_MONTH);
+        const oldest = await addPurchase(repo, 1000, 5, LAST_MONTH);
+        const middle = await addPurchase(repo, 2000, 9, THIS_MONTH);
+        const own = [newest.id, oldest.id, middle.id];
+
+        const inRange = await repo.listPaymentsForRange(LAST_MONTH, THIS_MONTH);
+
+        expect(ownAmounts(inRange, own)).toEqual([1000, 2000, 3000]);
+      });
+
+      it('zakres podany na opak daje ten sam wynik', async () => {
+        const repo = await createRepository();
+        await addPurchase(repo, 5000, 10, LAST_MONTH);
+
+        const forwards = await repo.listPaymentsForRange(LAST_MONTH, THIS_MONTH);
+        const backwards = await repo.listPaymentsForRange(THIS_MONTH, LAST_MONTH);
+
+        expect(backwards.map((p) => p.id)).toEqual(forwards.map((p) => p.id));
+      });
+
+      it('BR-05: rachunek bez kwoty jest zwracany, żeby dało się pokazać lukę', async () => {
+        const repo = await createRepository();
+        const withoutAmount = await addPurchase(repo, null, 12, THIS_MONTH);
+
+        const inRange = await repo.listPaymentsForRange(THIS_MONTH, THIS_MONTH);
+
+        expect(ownAmounts(inRange, [withoutAmount.id])).toEqual([null]);
+      });
+
+      it('dochody z zakresu obejmują oba skrajne miesiące', async () => {
+        const repo = await createRepository();
+        await repo.createIncome({
+          personName: 'Ola',
+          amountGrosze: 500000,
+          month: yearMonthKey(TWO_MONTHS_AGO),
+        });
+        await repo.createIncome({
+          personName: 'Marek',
+          amountGrosze: 400000,
+          month: yearMonthKey(THIS_MONTH),
+        });
+        await repo.createIncome({
+          personName: 'Poza zakresem',
+          amountGrosze: 100000,
+          month: yearMonthKey(THREE_MONTHS_AGO),
+        });
+
+        const names = (await repo.listIncomesForRange(TWO_MONTHS_AGO, THIS_MONTH)).map(
+          (i) => i.personName
+        );
+
+        expect(names).toContain('Ola');
+        expect(names).toContain('Marek');
+        expect(names).not.toContain('Poza zakresem');
+      });
+    });
+
+    describe('Zapisane zestawienia (Etap 13)', () => {
+      const GAZ = {
+        name: 'Gaz w czasie',
+        subjectKey: 'BILL_TEMPLATE:3',
+        rangeMode: AnalysisRangeMode.CUSTOM,
+        windowMonths: 6,
+      };
+
+      it('zapisane zestawienie wraca z listy w całości', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        const found = (await repo.listSavedReports()).find((r) => r.id === created.id);
+
+        expect(found).toMatchObject(GAZ);
+      });
+
+      it('nowe zestawienia trafiają na koniec listy', async () => {
+        const repo = await createRepository();
+        const first = await repo.createSavedReport({ ...GAZ, name: 'Pierwsze' });
+        const second = await repo.createSavedReport({ ...GAZ, name: 'Drugie' });
+
+        expect(second.sortOrder).toBeGreaterThan(first.sortOrder);
+        const order = (await repo.listSavedReports()).map((r) => r.id);
+        expect(order.indexOf(second.id)).toBeGreaterThan(order.indexOf(first.id));
+      });
+
+      it('tryb roku do roku nie ma długości okna', async () => {
+        const repo = await createRepository();
+
+        const created = await repo.createSavedReport({
+          name: 'Rok do roku',
+          subjectKey: 'ALL_EXPENSES',
+          rangeMode: AnalysisRangeMode.YEAR_OVER_YEAR,
+          windowMonths: null,
+        });
+
+        expect(created.windowMonths).toBeNull();
+      });
+
+      it('zmiana nazwy nie rusza reszty zestawienia', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        const renamed = await repo.updateSavedReport(created.id, { name: 'Gaz i ogrzewanie' });
+
+        expect(renamed.name).toBe('Gaz i ogrzewanie');
+        expect(renamed.subjectKey).toBe(GAZ.subjectKey);
+        expect(renamed.windowMonths).toBe(6);
+      });
+
+      it('usunięte zestawienie znika z listy', async () => {
+        const repo = await createRepository();
+        const created = await repo.createSavedReport(GAZ);
+
+        await repo.deleteSavedReport(created.id);
+
+        expect((await repo.listSavedReports()).map((r) => r.id)).not.toContain(created.id);
+      });
+
+      it('zestawienia wchodzą do kopii zapasowej i wracają z niej', async () => {
+        const repo = await createRepository();
+        await repo.createSavedReport(GAZ);
+
+        // Zestawienie to praca użytkownika tak samo jak wpisany wydatek —
+        // po zmianie telefonu musiałby wyklikać je od nowa.
+        await repo.importSnapshot(await repo.exportSnapshot());
+
+        expect((await repo.listSavedReports()).map((r) => r.name)).toContain('Gaz w czasie');
+      });
+
+      it('odtworzenie kopii bez zestawień czyści listę', async () => {
+        const repo = await createRepository();
+        await repo.createSavedReport(GAZ);
+
+        const snapshot = await repo.exportSnapshot();
+        await repo.importSnapshot({ ...snapshot, savedReports: [] });
+
+        expect(await repo.listSavedReports()).toEqual([]);
       });
     });
   });

@@ -238,10 +238,104 @@ export const strings = {
     waitingHidden: 'Rachunki bez kwoty nie są tu pokazywane.',
   },
 
-  /** 5.9: analiza — ekran tymczasowy do czasu osobnej specyfikacji. */
+  /**
+   * 5.9 + Etap 12: analiza.
+   *
+   * Specyfikacja zostawiła ten ekran pusty do czasu osobnej specyfikacji.
+   * Zakres ustalił właściciel projektu 27.08.2026: propozycje dobierane
+   * do danych plus własne zestawienie budowane na żywo.
+   */
   analysis: {
     title: 'Analiza',
-    placeholder: 'Moduł analizy zostanie dodany w kolejnym etapie.',
+    proposalsLabel: 'Warto sprawdzić',
+    ownLabel: 'Własne zestawienie',
+    buildOwn: 'Zbuduj własne zestawienie',
+    reportTitle: 'Zestawienie',
+
+    /** Nazwy przedmiotów analizy, które nie są zwykłym rekordem z bazy. */
+    subjectAllExpenses: 'Wszystkie wydatki',
+    subjectIncome: 'Dochody domowników',
+    subjectUnknown: 'Pozycja usunięta',
+
+    /** Wybór „co analizuję". */
+    subjectLabel: 'Co analizuję',
+    groupTogether: 'Razem',
+    groupBillsEmpty: 'Nie masz jeszcze rachunków cyklicznych.',
+    groupSubscriptionsEmpty: 'Nie masz jeszcze subskrypcji.',
+    groupCategoriesEmpty: 'Nie masz jeszcze podkategorii.',
+
+    /** Wybór zakresu czasu. */
+    rangeLabel: 'Zakres czasu',
+    rangeYearOverYear: 'Rok do roku',
+    rangeCustom: 'Wybrany zakres',
+    rangeFrom: 'Od miesiąca',
+    rangeTo: 'Do miesiąca',
+    rangeFromEarlier: 'Miesiąc początkowy',
+    rangeToLater: 'Miesiąc końcowy',
+
+    /** Wynik zestawienia. */
+    total: 'Suma',
+    average: 'Średnio na miesiąc',
+    highest: 'Najdrożej',
+    lowest: 'Najtaniej',
+    chartLabel: 'Miesiąc po miesiącu',
+    noData:
+      'W tym zakresie nie ma jeszcze żadnych danych. Wybierz inny zakres albo wróć tutaj, gdy przybędzie zapisów.',
+    averageHint: (monthsWithData: number, monthCount: number) =>
+      `Średnia z ${monthsWithData} z ${monthCount} miesięcy zakresu — miesiące bez danych są pomijane.`,
+    missingAmounts: (count: number) =>
+      count === 1
+        ? 'Jeden rachunek w tym zakresie czeka na wpisanie kwoty i nie wchodzi do sumy.'
+        : `${count} rachunki w tym zakresie czekają na wpisanie kwoty i nie wchodzą do sumy.`,
+
+    /** Zestawienie rok do roku. */
+    yearCurrent: 'Ten rok',
+    yearPrevious: 'Poprzedni rok',
+    yearDifference: 'Różnica',
+    yearMonthsHint: (months: number) =>
+      months === 12
+        ? 'Porównanie obejmuje pełne dwanaście miesięcy każdego roku.'
+        : `Porównanie obejmuje pierwsze ${months} miesięcy każdego roku — tyle, ile minęło w tym roku.`,
+    yearNotComparable: 'Z poprzedniego roku nie ma jeszcze danych, więc nie ma czego porównać.',
+    yearMore: 'więcej niż rok temu',
+    yearLess: 'mniej niż rok temu',
+
+    /** Powody, dla których aplikacja proponuje dane zestawienie. */
+    proposalHigher: (percent: number, monthLabel: string) =>
+      `${monthLabel}: o ${percent}% drożej niż zwykle`,
+    proposalLower: (percent: number, monthLabel: string) =>
+      `${monthLabel}: o ${percent}% taniej niż zwykle`,
+    proposalOverspent: (monthLabel: string) => `${monthLabel}: wydatki przekroczyły dochody`,
+    proposalBiggestBill: (months: number) =>
+      `Twój największy rachunek ostatnich ${months} miesięcy`,
+    proposalAllExpenses: (months: number) => `Jak zmieniały się wydatki przez ${months} miesięcy`,
+    proposalBills: (months: number) =>
+      `Rachunki domowe miesiąc po miesiącu, przez ${months} miesięcy`,
+    proposalIncome: (months: number) => `Ile wpływało co miesiąc przez ${months} miesięcy`,
+
+    /** Etap 13: zapisywanie własnych zestawień. */
+    savedLabel: 'Twoje zestawienia',
+    saveTitle: 'Zapisz to zestawienie',
+    saveNameLabel: 'Nazwa zestawienia',
+    saveNamePlaceholder: 'np. Gaz w czasie',
+    saveAction: 'Zapisz zestawienie',
+    saveNameRequired: 'Podaj nazwę, po której je rozpoznasz.',
+    saveDuplicate: 'Masz już zestawienie o tej nazwie.',
+    saved: 'Zestawienie zapisane. Znajdziesz je na ekranie Analiza.',
+    /**
+     * Zapisujemy DŁUGOŚĆ okna, nie konkretne miesiące — i użytkownik musi to
+     * wiedzieć przed kliknięciem, bo inaczej byłby przekonany, że zapisał
+     * marzec–sierpień.
+     */
+    saveWindowHint: (count: number, monthsWord: string) =>
+      `Zapiszę jako „ostatnie ${count} ${monthsWord}", licząc od bieżącego. Zestawienie będzie przesuwać się razem z kalendarzem, więc nie zdezaktualizuje się za miesiąc.`,
+    saveYearHint:
+      'Zapiszę jako porównanie roku do roku — zawsze bieżący rok z poprzednim, bez względu na to, kiedy je otworzysz.',
+    savedWindow: (count: number, monthsWord: string) => `ostatnie ${count} ${monthsWord}`,
+    savedYearOverYear: 'rok do roku',
+    deleteTitle: 'Usunąć zestawienie?',
+    deleteMessage: 'Znika samo zestawienie. Żaden zapisany wydatek nie zostanie ruszony.',
+    deleteAction: 'Usuń zestawienie',
   },
 
   /** Etap 11: budżet miesiąca — wykres na ekranie głównym. */
@@ -322,6 +416,7 @@ export const strings = {
     countsSubscriptions: 'Subskrypcje',
     countsCategories: 'Podkategorie',
     countsIncomes: 'Dochody',
+    countsSavedReports: 'Zapisane zestawienia',
 
     /** Powody odmowy — każdy mówi, co konkretnie zrobić. */
     error: {
