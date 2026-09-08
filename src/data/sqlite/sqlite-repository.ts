@@ -30,6 +30,9 @@ import {
 import { newUuid } from '@/lib/uuid';
 
 import type {
+  PendingChanges,
+  SyncedMark,
+  SyncedMarks,
   BillAmountHistoryEntry,
   BillTemplatePatch,
   CategoryTotal,
@@ -886,6 +889,147 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     return this.db.all<DeletedRecord>(
       `SELECT entityType, uuid, deletedAt FROM deleted_record ORDER BY deletedAt, uuid`
     );
+  }
+
+  // --- Synchronizacja (Etap 14c) ---
+
+  /**
+   * Rekordy, których serwer jeszcze nie widział w tej postaci.
+   *
+   * Każde zapytanie dokłada ZŁĄCZENIEM trwałe identyfikatory tego, na co
+   * rekord wskazuje. To jest właśnie ten jeden JOIN, dla którego odstąpiliśmy
+   * od przepisywania kluczy obcych na `uuid` w całej aplikacji — cała cena
+   * tamtej decyzji mieści się w tych czterech zapytaniach.
+   *
+   * Złączenia są LEWE (`LEFT JOIN`), choć `categoryId` jest w bazie
+   * wymagane. Gdyby kiedykolwiek wskazywało na kategorię, której nie ma,
+   * zwykłe złączenie po cichu POMINĘŁOBY taki wydatek — a wydatek pominięty
+   * przy wysyłce nigdy nie trafi na drugi telefon i nikt się o tym nie
+   * dowie. Lewe złączenie odda go z pustym identyfikatorem kategorii,
+   * czyli z widocznym śladem po usterce.
+   */
+  async listPendingChanges(): Promise<PendingChanges> {
+    const categoryRows = await this.db.all<CategoryRow>(
+      'SELECT * FROM category WHERE pendingSync = 1 ORDER BY id'
+    );
+
+    const templateRows = await this.db.all<BillTemplateRow & { categoryUuid: string | null }>(
+      `SELECT t.*, c.uuid AS categoryUuid
+         FROM bill_template t
+         LEFT JOIN category c ON c.id = t.categoryId
+        WHERE t.pendingSync = 1
+        ORDER BY t.id`
+    );
+
+    const subscriptionRows = await this.db.all<SubscriptionRow & { categoryUuid: string | null }>(
+      `SELECT s.*, c.uuid AS categoryUuid
+         FROM subscription s
+         LEFT JOIN category c ON c.id = s.categoryId
+        WHERE s.pendingSync = 1
+        ORDER BY s.id`
+    );
+
+    const paymentRows = await this.db.all<
+      PaymentRow & {
+        categoryUuid: string | null;
+        billTemplateUuid: string | null;
+        subscriptionUuid: string | null;
+      }
+    >(
+      `SELECT p.*,
+              c.uuid AS categoryUuid,
+              t.uuid AS billTemplateUuid,
+              s.uuid AS subscriptionUuid
+         FROM payment p
+         LEFT JOIN category c ON c.id = p.categoryId
+         LEFT JOIN bill_template t ON t.id = p.billTemplateId
+         LEFT JOIN subscription s ON s.id = p.subscriptionId
+        WHERE p.pendingSync = 1
+        ORDER BY p.id`
+    );
+
+    const incomeRows = await this.db.all<IncomeRow>(
+      'SELECT * FROM income WHERE pendingSync = 1 ORDER BY id'
+    );
+
+    const deletedRows = await this.db.all<DeletedRecord>(
+      `SELECT entityType, uuid, deletedAt
+         FROM deleted_record
+        WHERE pendingSync = 1
+        ORDER BY deletedAt, uuid`
+    );
+
+    return {
+      categories: categoryRows.map((row) => this.toCategory(row)),
+      billTemplates: templateRows.map((row) => ({
+        ...this.toBillTemplate(row),
+        categoryUuid: row.categoryUuid,
+      })),
+      subscriptions: subscriptionRows.map((row) => ({
+        ...this.toSubscription(row),
+        categoryUuid: row.categoryUuid,
+      })),
+      payments: paymentRows.map((row) => ({
+        ...this.toStoredPayment(row),
+        categoryUuid: row.categoryUuid,
+        billTemplateUuid: row.billTemplateUuid,
+        subscriptionUuid: row.subscriptionUuid,
+      })),
+      incomes: incomeRows.map((row) => this.toIncome(row)),
+      deletedRecords: deletedRows,
+    };
+  }
+
+  /**
+   * Gasi znacznik przy rekordach potwierdzonych przez serwer.
+   *
+   * Warunek `AND pendingSync = 1` wygląda na zbędny — skoro gasimy, to
+   * przecież się palił. Nie jest: bez niego zapis dotknąłby też rekordu
+   * już zgaszonego, a wyzwalacz z migracji 4 potraktowałby zmianę 0 → 0
+   * jako edycję i ZAPALIŁBY znacznik z powrotem. Rekord wysłany dwa razy
+   * zostałby wtedy oznaczony jako niewysłany.
+   */
+  async markSynced(marks: SyncedMarks): Promise<void> {
+    await this.db.exec('BEGIN');
+
+    try {
+      for (const uuid of marks.categories) {
+        await this.db.run(
+          'UPDATE category SET pendingSync = 0 WHERE uuid = ? AND pendingSync = 1',
+          [uuid]
+        );
+      }
+
+      const tabele: [string, SyncedMark[]][] = [
+        ['bill_template', marks.billTemplates],
+        ['subscription', marks.subscriptions],
+        ['payment', marks.payments],
+        ['income', marks.incomes],
+      ];
+
+      for (const [tabela, wpisy] of tabele) {
+        for (const mark of wpisy) {
+          await this.db.run(
+            `UPDATE ${tabela} SET pendingSync = 0
+              WHERE uuid = ? AND updatedAt = ? AND pendingSync = 1`,
+            [mark.uuid, mark.updatedAt]
+          );
+        }
+      }
+
+      for (const mark of marks.deletedRecords) {
+        await this.db.run(
+          `UPDATE deleted_record SET pendingSync = 0
+            WHERE entityType = ? AND uuid = ? AND pendingSync = 1`,
+          [mark.entityType, mark.uuid]
+        );
+      }
+
+      await this.db.exec('COMMIT');
+    } catch (error) {
+      await this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   async exportSnapshot(): Promise<BackupSnapshot> {

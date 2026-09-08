@@ -456,9 +456,19 @@ export const strings = {
     /** Stan przejściowy — trwa ułamek sekundy, ale bez niego mrugałby ekran logowania. */
     loading: 'Sprawdzam konto...',
 
-    /** To zdanie jest najważniejsze na całym ekranie. */
+    /**
+     * To zdanie jest najważniejsze na całym ekranie i zmienia się wraz z tym,
+     * co aplikacja NAPRAWDĘ potrafi.
+     *
+     * Etap 14a: nie wysyłała ani nie pobierała. Etap 14c: wysyła, ale nie
+     * pobiera — i właśnie ta połowa jest niebezpieczna, bo wygląda na całość.
+     * Człowiek, który przeczyta „wysłano 340 wydatków", uzna, że drugi telefon
+     * je zobaczy, a nie zobaczy. Uzna też, że dane są bezpieczne, i przestanie
+     * robić kopie zapasowe — a kopia nadal jest jedynym sposobem, żeby te dane
+     * ODZYSKAĆ. Wysłane nie znaczy możliwe do odzyskania.
+     */
     notSyncingYet:
-      'Synchronizacja jeszcze nie działa — to kolejny etap prac. Na razie zalogowanie niczego nie wysyła ani nie pobiera, a Twoje wydatki nadal są wyłącznie w tym telefonie. Rób kopie zapasowe tak samo jak dotąd.',
+      'Wysyłanie działa, pobieranie jeszcze nie. Twoje wydatki trafiają do chmury, ale drugi telefon ich na razie nie zobaczy i nie da się ich stamtąd przywrócić do aplikacji. Rób kopie zapasowe tak samo jak dotąd — to nadal jedyny sposób na odzyskanie danych.',
 
     /** --- Logowanie i zakładanie konta --- */
     signInTitle: 'Zaloguj się',
@@ -514,6 +524,55 @@ export const strings = {
         'Brak połączenia z serwerem. Sprawdź internet w telefonie. Jeśli internet działa, serwer mógł uśpić się po tygodniu bezczynności — spróbuj jeszcze raz za minutę.',
       NOT_CONFIGURED: 'Ta wersja aplikacji nie ma podłączonego projektu w chmurze.',
       UNKNOWN: 'Coś poszło nie tak i nie potrafimy powiedzieć co. Spróbuj ponownie za chwilę.',
+    },
+
+    /** --- Wysyłka do chmury (Etap 14c) --- */
+    sync: {
+      title: 'Wysyłka do chmury',
+
+      /**
+       * Licznik zamiast ślepego przycisku — patrz `usePendingSyncCount`.
+       * Trzy formy, bo polszczyzna ma trzy (patrz `src/lib/plural.ts`).
+       */
+      pending: {
+        one: 'rekord czeka na wysłanie',
+        few: 'rekordy czekają na wysłanie',
+        many: 'rekordów czeka na wysłanie',
+      },
+      upToDate: 'Wszystko zostało już wysłane.',
+
+      button: 'Wyślij do chmury',
+      working: 'Wysyłam...',
+
+      records: { one: 'rekord', few: 'rekordy', many: 'rekordów' },
+      sent: (ile: number, forma: string) => `Wysłano ${ile} ${forma}.`,
+      nothingToSend: 'Nie było czego wysyłać — serwer ma już wszystko.',
+
+      /**
+       * Powody odmowy. Każdy prowadzi do czegoś INNEGO, i tylko dlatego
+       * jest osobnym powodem.
+       */
+      error: {
+        NOT_CONFIGURED:
+          'Ta wersja aplikacji nie ma podłączonego projektu w chmurze, więc nie ma dokąd wysyłać.',
+        NOT_SIGNED_IN: 'Najpierw zaloguj się na konto.',
+        OFFLINE:
+          'Brak połączenia z serwerem. Sprawdź internet w telefonie i spróbuj ponownie — nic nie przepadło, wszystko czeka w kolejce.',
+        /**
+         * Jedyny powód, którego NIE DA SIĘ naprawić z telefonu. Dlatego mówi
+         * wprost, co zrobić i gdzie, zamiast prosić o ponowną próbę.
+         */
+        SCHEMA_MISSING:
+          'W Twoim projekcie w chmurze nie ma jeszcze tabel na dane. Otwórz panel Supabase na komputerze, wejdź w „SQL Editor" i uruchom plik docs/supabase/01-schemat-i-reguly.sql z repozytorium aplikacji. Potem wróć tutaj i spróbuj ponownie.',
+        PERMISSION_DENIED:
+          'Serwer odmówił zapisu. Najczęściej znaczy to, że reguły dostępu w projekcie nie zostały założone — uruchom ponownie plik docs/supabase/01-schemat-i-reguly.sql w panelu Supabase.',
+        UNKNOWN:
+          'Coś poszło nie tak i nie potrafimy powiedzieć co. Nic nie przepadło — spróbuj ponownie za chwilę.',
+      },
+
+      /** Widoczne po nieudanej wysyłce, gdy część rekordów zdążyła dojechać. */
+      partial: (ile: number, forma: string) =>
+        `Zanim wysyłka się przerwała, na serwer trafił${ile === 1 ? '' : 'o'} ${ile} ${forma}. Ta praca nie przepadła — następna próba zacznie od reszty.`,
     },
   },
 

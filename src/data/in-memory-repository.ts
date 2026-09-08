@@ -34,6 +34,9 @@ import { newUuid } from '@/lib/uuid';
 
 import { buildDemoData } from './demo-data';
 import type {
+  PendingChanges,
+  SyncedMark,
+  SyncedMarks,
   BillAmountHistoryEntry,
   BillTemplatePatch,
   CategoryTotal,
@@ -137,6 +140,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
           this.subscriptionGenerationKey(p.subscriptionId as number, yearMonthOf(p.effectiveDate))
         )
     );
+
+    this.markEverythingPending();
   }
 
   // --- Kategorie ---
@@ -223,6 +228,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       sortOrder: input.sortOrder ?? maxSortOrder + 1,
     };
     this.categories.push(category);
+    this.markPending('CATEGORY', category.uuid);
     return category;
   }
 
@@ -254,6 +260,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: now,
     };
     this.payments.push(payment);
+    this.markPending('PAYMENT', payment.uuid);
     return this.withComputedStatus(payment);
   }
 
@@ -268,6 +275,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: new Date().toISOString(),
     };
     this.payments[index] = updated;
+    this.markPending('PAYMENT', updated.uuid);
     return this.withComputedStatus(updated);
   }
 
@@ -299,6 +307,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: now,
     };
     this.billTemplates.push(template);
+    this.markPending('BILL_TEMPLATE', template.uuid);
     return template;
   }
 
@@ -312,6 +321,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: new Date().toISOString(),
     };
     this.billTemplates[index] = updated;
+    this.markPending('BILL_TEMPLATE', updated.uuid);
     return updated;
   }
 
@@ -385,6 +395,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: now,
     };
     this.subscriptions.push(subscription);
+    this.markPending('SUBSCRIPTION', subscription.uuid);
     return subscription;
   }
 
@@ -398,6 +409,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: new Date().toISOString(),
     };
     this.subscriptions[index] = updated;
+    this.markPending('SUBSCRIPTION', updated.uuid);
     return updated;
   }
 
@@ -439,6 +451,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: now,
     };
     this.incomes.push(income);
+    this.markPending('INCOME', income.uuid);
     return income;
   }
 
@@ -452,6 +465,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       updatedAt: new Date().toISOString(),
     };
     this.incomes[index] = updated;
+    this.markPending('INCOME', updated.uuid);
     return updated;
   }
 
@@ -559,6 +573,140 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
       (record) => !(record.entityType === entityType && record.uuid === uuid)
     );
     this.deletedRecords.push({ entityType, uuid, deletedAt: new Date().toISOString() });
+    this.markPending(`DELETED_${entityType}`, uuid);
+  }
+
+  // --- Synchronizacja (Etap 14c) ---
+
+  /**
+   * Rekordy czekające na wysłanie — odpowiednik kolumny `pendingSync`.
+   *
+   * Wersja na SQLite podnosi ten znacznik WYZWALACZEM, więc nie da się
+   * o niego zapomnieć przy żadnym zapisie. Tutaj wyzwalaczy nie ma i trzeba
+   * go podnosić ręcznie w każdej metodzie, która coś zmienia.
+   *
+   * PIERWSZE PODEJŚCIE BYŁO SPRYTNIEJSZE I BŁĘDNE. Zamiast znacznika
+   * porównywało `updatedAt` rekordu z zapamiętanym przy wysyłce — obywało
+   * się bez dopisków w kilkunastu metodach, ale gubiło zmianę wykonaną w tej
+   * samej MILISEKUNDZIE co poprzednia: `new Date().toISOString()` daje
+   * wtedy identyczny tekst, więc edycja wyglądała na brak edycji. Testy
+   * kontraktu złapały to od razu, bo wersja na SQLite takiego problemu
+   * nie ma. Wierny odpowiednik jest tu wart więcej niż krótszy zapis.
+   */
+  private pendingSync = new Set<string>();
+
+  private pendingKey(kind: string, uuid: string): string {
+    return `${kind}:${uuid}`;
+  }
+
+  /** Odpowiednik wyzwalacza: ten rekord czeka na wysłanie. */
+  private markPending(kind: string, uuid: string): void {
+    this.pendingSync.add(this.pendingKey(kind, uuid));
+  }
+
+  private isPending(kind: string, uuid: string): boolean {
+    return this.pendingSync.has(this.pendingKey(kind, uuid));
+  }
+
+  /**
+   * Wszystko czeka na wysłanie — stan po wczytaniu danych demonstracyjnych
+   * i po odtworzeniu kopii zapasowej.
+   *
+   * Odpowiednik `DEFAULT 1` przy kolumnie `pendingSync` w wersji na SQLite:
+   * rekord, który dopiero co pojawił się w TEJ bazie, nie był jeszcze przez
+   * nią wysłany — choćby powstał wiele miesięcy temu na innym telefonie.
+   */
+  private markEverythingPending(): void {
+    this.pendingSync = new Set();
+
+    for (const category of this.categories) this.markPending('CATEGORY', category.uuid);
+    for (const template of this.billTemplates) this.markPending('BILL_TEMPLATE', template.uuid);
+    for (const subscription of this.subscriptions) {
+      this.markPending('SUBSCRIPTION', subscription.uuid);
+    }
+    for (const payment of this.payments) this.markPending('PAYMENT', payment.uuid);
+    for (const income of this.incomes) this.markPending('INCOME', income.uuid);
+    for (const record of this.deletedRecords) {
+      this.markPending(`DELETED_${record.entityType}`, record.uuid);
+    }
+  }
+
+  private categoryUuidOf(categoryId: number): string | null {
+    return this.categories.find((category) => category.id === categoryId)?.uuid ?? null;
+  }
+
+  async listPendingChanges(): Promise<PendingChanges> {
+    return {
+      categories: this.categories.filter((category) => this.isPending('CATEGORY', category.uuid)),
+      billTemplates: this.billTemplates
+        .filter((template) => this.isPending('BILL_TEMPLATE', template.uuid))
+        .map((template) => ({
+          ...template,
+          categoryUuid: this.categoryUuidOf(template.categoryId),
+        })),
+      subscriptions: this.subscriptions
+        .filter((subscription) => this.isPending('SUBSCRIPTION', subscription.uuid))
+        .map((subscription) => ({
+          ...subscription,
+          categoryUuid: this.categoryUuidOf(subscription.categoryId),
+        })),
+      payments: this.payments
+        .filter((payment) => this.isPending('PAYMENT', payment.uuid))
+        .map((payment) => ({
+          ...payment,
+          categoryUuid: this.categoryUuidOf(payment.categoryId),
+          billTemplateUuid:
+            this.billTemplates.find((template) => template.id === payment.billTemplateId)?.uuid ??
+            null,
+          subscriptionUuid:
+            this.subscriptions.find((subscription) => subscription.id === payment.subscriptionId)
+              ?.uuid ?? null,
+        })),
+      incomes: this.incomes.filter((income) => this.isPending('INCOME', income.uuid)),
+      deletedRecords: this.deletedRecords.filter((record) =>
+        this.isPending(`DELETED_${record.entityType}`, record.uuid)
+      ),
+    };
+  }
+
+  /**
+   * Odpowiednik zapytania `UPDATE ... SET pendingSync = 0 WHERE uuid = ?
+   * AND updatedAt = ?` z wersji na SQLite — łącznie z warunkiem na znacznik
+   * czasu, który chroni przed zgaszeniem kolejki dla poprawki wprowadzonej
+   * już PO odczytaniu rekordów do wysłania.
+   */
+  async markSynced(marks: SyncedMarks): Promise<void> {
+    for (const uuid of marks.categories) {
+      this.pendingSync.delete(this.pendingKey('CATEGORY', uuid));
+    }
+
+    const rodzaje: [string, SyncedMark[]][] = [
+      ['BILL_TEMPLATE', marks.billTemplates],
+      ['SUBSCRIPTION', marks.subscriptions],
+      ['PAYMENT', marks.payments],
+      ['INCOME', marks.incomes],
+    ];
+
+    const aktualnyZnacznik = (kind: string, uuid: string): string | undefined => {
+      const gdzie: Record<string, { uuid: string; updatedAt: string }[]> = {
+        BILL_TEMPLATE: this.billTemplates,
+        SUBSCRIPTION: this.subscriptions,
+        PAYMENT: this.payments,
+        INCOME: this.incomes,
+      };
+      return gdzie[kind]?.find((item) => item.uuid === uuid)?.updatedAt;
+    };
+
+    for (const [kind, wpisy] of rodzaje) {
+      for (const mark of wpisy) {
+        if (aktualnyZnacznik(kind, mark.uuid) !== mark.updatedAt) continue;
+        this.pendingSync.delete(this.pendingKey(kind, mark.uuid));
+      }
+    }
+
+    for (const mark of marks.deletedRecords) {
+      this.pendingSync.delete(this.pendingKey(`DELETED_${mark.entityType}`, mark.uuid));
+    }
   }
 
   async exportSnapshot(): Promise<BackupSnapshot> {
@@ -606,6 +754,8 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.nextPaymentId = maxId(this.payments) + 1;
     this.nextBillTemplateId = maxId(this.billTemplates) + 1;
     this.nextSubscriptionId = maxId(this.subscriptions) + 1;
+    // Odtworzone rekordy są dla TEJ bazy nowe — patrz markEverythingPending().
+    this.markEverythingPending();
     this.nextIncomeId = maxId(this.incomes) + 1;
     this.nextSavedReportId = maxId(this.savedReports) + 1;
   }

@@ -785,7 +785,7 @@ aplikacją (zasada 4 z `AGENTS.md`):
 | ---- | ------------------------------------------------------------ | ----------------------------------- |
 | 14a  | Klient Supabase, logowanie, ekran konta                      | Nowy ekran „Konto"                  |
 | 14b  | `uuid` w modelach, ślad po skasowanych, znacznik do wysłania | Nic — przebudowa fundamentu         |
-| 14c  | Tabele na serwerze + RLS, wysyłka zmian                      | Przycisk „Synchronizuj"             |
+| 14c  | Tabele na serwerze + RLS, wysyłka zmian                      | Przycisk „Wyślij do chmury"         |
 | 14d  | Pobieranie, scalanie, rozstrzyganie konfliktów               | Drugi telefon widzi dane pierwszego |
 
 ### Etap 14a — konto i logowanie ✅ ZAKOŃCZONY
@@ -973,15 +973,129 @@ z prawdziwymi danymi — po migracji 3 → 4 wszystkie wydatki mają być na mie
 Test `aktualizacja ze starej wersji schematu zachowuje dane użytkownika`
 odgrywa to w Node, ale na prawdziwym pliku bazy nikt tego jeszcze nie widział.
 
-### Etap 14c — schemat na serwerze i wysyłka 🔜
+### Etap 14c — schemat na serwerze i wysyłka ✅ ZAKOŃCZONY
 
-- [ ] Tabele w Supabase z kolumną `user_id`
-- [ ] Reguły RLS: `auth.uid() = user_id` — jedyne prawdziwe zabezpieczenie danych
-- [ ] Wysyłka rekordów oznaczonych „do wysłania"
+- [x] Tabele w Supabase z kolumną `user_id` — `docs/supabase/01-schemat-i-reguly.sql`
+- [x] Reguły RLS: `auth.uid() = user_id` — jedyne prawdziwe zabezpieczenie danych
+- [x] Tłumaczenie rekordów na wiersze serwera — `src/features/sync/sync-payload.ts`
+- [x] Wysyłka rekordów oznaczonych „do wysłania" — `sync-service.ts`
+- [x] Tłumaczenie błędów serwera na polskie powody — `sync-errors.ts`
+- [x] Kolejka do wysłania w repozytorium: `listPendingChanges` i `markSynced`
+- [x] Karta „Wysyłka do chmury" na ekranie konta, z licznikiem oczekujących
+- [x] 44 nowe testy (razem 471, wszystkie przechodzą)
+
+**TEN ETAP TYLKO WYSYŁA.** Nic nie pobiera. Drugi telefon zobaczy te dane
+dopiero po Etapie 14d, a z chmury nie da się jeszcze niczego przywrócić
+do aplikacji.
+
+#### Plik SQL uruchamia właściciel projektu, nie aplikacja
+
+Aplikacja nosi w sobie klucz `publishable`. Ten klucz z założenia NIE MOŻE
+zakładać tabel ani zmieniać schematu — gdyby mógł, każdy, kto wyciągnie go
+z zainstalowanej aplikacji, przerabiałby bazę do woli. Schemat zakłada się raz,
+w panelu Supabase, zalogowanym właścicielem projektu.
+
+Dlatego `docs/supabase/01-schemat-i-reguly.sql` jest plikiem do wklejenia,
+a nie migracją uruchamianą przez kod. Można go uruchamiać wielokrotnie —
+każde polecenie ma `if not exists` albo `drop ... if exists` przed sobą.
+
+#### Brak tabel ma WŁASNY komunikat
+
+To jedyna usterka, której nie da się naprawić z telefonu, więc ekran nie mówi
+„coś poszło nie tak, spróbuj ponownie" — tylko wprost: otwórz panel Supabase
+na komputerze i uruchom ten plik. Rozpoznajemy ją po kodzie `42P01`
+i `PGRST205`, a zapasowo po treści komunikatu.
+
+Ta sama szufladka łapie kod `42703` (brakująca KOLUMNA), bo znaczy on, że
+tabele powstały ze starszej wersji pliku — a rada jest identyczna.
+
+#### Znacznik gaśnie po każdej tabeli, nie na końcu
+
+Przy słabym zasięgu wysyłka bywa przerwana w połowie. Gdyby znaczniki gasły
+dopiero po całości, przerwanie na ostatniej tabeli kazałoby wysyłać wszystko
+od nowa — i tak w kółko, dopóki użytkownik nie trafi na dość długi moment
+z dobrym łączem. Gaszenie po każdej tabeli zachowuje to, co już dojechało.
+
+Odwrotna kolejność byłaby błędem cichym i nieodwracalnym: znacznik zgaszony
+PRZED potwierdzeniem serwera znaczy „ten rekord jest już w chmurze", a jeżeli
+nie jest, nic go tam nigdy nie wyśle.
+
+#### Potwierdzenie niesie znacznik czasu, nie sam identyfikator
+
+Między odczytaniem rekordów a potwierdzeniem wysyłki mija czas — na słabym
+łączu kilkanaście sekund. Użytkownik może w tym czasie poprawić kwotę wydatku,
+który właśnie poleciał. Gaszenie po samym `uuid` skasowałoby ślad po TEJ
+poprawce: rekord przestałby być oznaczony, więc nic by go już nie wysłało,
+a serwer zostałby ze starą kwotą na zawsze.
+
+Warunek brzmi więc `WHERE uuid = ? AND updatedAt = ? AND pendingSync = 1`.
+Trzeci człon też nie jest ozdobą — bez niego zapis dotknąłby rekordu już
+zgaszonego, a wyzwalacz z migracji 4 potraktowałby zmianę 0 → 0 jako edycję
+i zapalił znacznik z powrotem.
+
+Kategorie są tu wyjątkiem: jako jedyna encja nie mają `updatedAt`, więc
+zmiana nazwy kategorii w trakcie wysyłki może przepaść do następnego zapisu.
+Świadome uproszczenie — kategorie zmienia się rzadko, a dołożenie im znacznika
+czasu to kolejna migracja schematu.
+
+#### Trzech rzeczy nie wysyłamy
+
+| Pole               | Dlaczego zostaje w telefonie                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `receiptImagePath` | Ścieżka do pliku w pamięci jednego telefonu. Na drugim nie prowadzi donikąd — dałaby wydatek udający, że ma paragon, i zawodzący przy otwarciu.      |
+| `status` rachunku  | BR-11: wyliczany przy każdym odczycie, żeby rachunek stawał się „po terminie" sam. Wysłany byłby wartością, która o północy przestaje być prawdziwa. |
+| lokalne `id`       | Numer kolejny jednej bazy. Na drugim telefonie oznacza inny rekord.                                                                                  |
+
+Poza tym nie jadą jeszcze zapisane zestawienia (nie mają `uuid`) ani rejestr
+wygenerowanych rachunków (jest kluczowany lokalnym numerem szablonu). Jedno
+i drugie zostaje w kopii zapasowej i czeka na Etap 14d.
+
+#### Serwer nie ma kluczy obcych — i to jest decyzja
+
+Wygląda na brak dyscypliny, ale rekordy przychodzą paczkami i przy słabym
+zasięgu paczka bywa przerwana w połowie. Twardy klucz obcy odrzuciłby wtedy
+wydatek NA STAŁE, bo jego kategoria jeszcze nie dojechała. Bez klucza wydatek
+czeka i doczeka się przy następnej wysyłce.
+
+Etap 14d i tak musi znieść rekord wskazujący na nieznaną kategorię — przy
+pobieraniu stronami kolejność nigdy nie jest gwarantowana.
+
+#### Ostrzeżenie na ekranie zmieniło treść, a nie zniknęło
+
+Etap 14a mówił „synchronizacja jeszcze nie działa". Teraz mówi: wysyłanie
+działa, pobieranie nie. Ta połowa jest groźniejsza niż całkowity brak,
+bo wygląda na całość — kto przeczyta „wysłano 340 rekordów", uzna, że dane
+są bezpieczne, i przestanie robić kopie zapasowe. Tymczasem z chmury nadal
+nie da się niczego odzyskać. Wysłane nie znaczy możliwe do odzyskania.
+
+#### Sprawdzone
+
+| Sprawdzenie                      | Wynik                                          |
+| -------------------------------- | ---------------------------------------------- |
+| `npm run typecheck`              | czysty                                         |
+| `npm run lint`                   | czysty                                         |
+| `npm test`                       | 471 testów, 25 zestawów — wszystkie przechodzą |
+| `npx expo export --platform web` | build przechodzi                               |
+| Ekran konta w przeglądarce       | renderuje się, bez błędów w konsoli            |
+
+Testy wysyłki chodzą na podstawionym kliencie Supabase — bez sieci i bez
+konta. Sprawdzają to, co w tej warstwie najłatwiej zepsuć po cichu:
+kolejność tabel, moment gaszenia znacznika i zachowanie przy awarii w połowie.
+
+**Do sprawdzenia z prawdziwym serwerem:** uruchomienie pliku SQL w panelu,
+zalogowanie na telefonie i wysyłka. Żaden test tego nie obejmuje — podstawiony
+klient z definicji zgadza się na wszystko, a prawdziwe reguły RLS mogą
+odmówić.
 
 ### Etap 14d — pobieranie i scalanie 🔜
 
-- [ ] Pobieranie zmian od znacznika czasu serwera
+- [ ] Pobieranie zmian od znacznika `synced_at` — kolumna i indeksy już są
+- [ ] Rozstrzyganie, który zapis jest nowszy, po `updated_at` (tekst ISO w UTC,
+      więc porównanie tekstów jest zarazem porównaniem chronologicznym)
+- [ ] Tłumaczenie `uuid` z powrotem na lokalne `id` przy zapisie
+- [ ] Zniesienie rekordu wskazującego na nieznaną jeszcze kategorię
+- [ ] Zapisane zestawienia i rejestr wygenerowanych rachunków — jedno i drugie
+      wypadło z Etapu 14c, bo nie ma trwałych identyfikatorów
 - [ ] Konflikt rozstrzyga nowszy zapis (decyzja właściciela projektu, 08.09.2026)
 - [ ] Ekran stanu synchronizacji
 

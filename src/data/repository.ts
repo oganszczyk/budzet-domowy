@@ -89,6 +89,84 @@ export type NewSavedReport = Omit<SavedReport, 'id' | 'sortOrder' | 'createdAt' 
 /** Pola, które wolno zmienić w zapisanym zestawieniu — w praktyce nazwa. */
 export type SavedReportPatch = Partial<Omit<SavedReport, 'id' | 'createdAt' | 'updatedAt'>>;
 
+/**
+ * Etap 14c: REKORDY CZEKAJĄCE NA WYSŁANIE.
+ *
+ * Każdy zapis podnosi w bazie znacznik `pendingSync` (Etap 14b). Te typy
+ * opisują, co repozytorium oddaje synchronizacji, gdy o te rekordy zapyta.
+ *
+ * DLACZEGO DOKŁADAMY `...Uuid` OBOK `...Id`
+ *
+ * Lokalne `categoryId` to numer kolejny tej jednej bazy — na drugim telefonie
+ * ta sama liczba oznacza inną kategorię. Serwer musi dostać identyfikator
+ * trwały. Repozytorium dokłada go ZŁĄCZENIEM przy odczycie, zamiast trzymać
+ * w tabelach klucze obce po `uuid`: wewnątrz telefonu liczba jest poprawna
+ * i szybsza, a tłumaczenie potrzebne jest wyłącznie w rozmowie z serwerem
+ * (uzasadnienie odstąpienia od pierwotnego planu — `docs/ETAPY.md`, Etap 14b).
+ *
+ * Pole bywa puste, choć w bazie klucz obcy jest wymagany: `billTemplateId`
+ * i `subscriptionId` są puste dla wydatku wpisanego ręcznie.
+ */
+export type PendingBillTemplate = BillTemplate & {
+  /** Trwały identyfikator kategorii, do której należy szablon. */
+  categoryUuid: string | null;
+};
+
+export type PendingSubscription = Subscription & {
+  categoryUuid: string | null;
+};
+
+export type PendingPayment = Payment & {
+  categoryUuid: string | null;
+  /** Trwały identyfikator szablonu, z którego powstał rachunek. */
+  billTemplateUuid: string | null;
+  /** Trwały identyfikator subskrypcji, z której powstała płatność. */
+  subscriptionUuid: string | null;
+};
+
+/** Wszystko, czego serwer jeszcze nie widział w tej postaci. */
+export type PendingChanges = {
+  categories: Category[];
+  billTemplates: PendingBillTemplate[];
+  subscriptions: PendingSubscription[];
+  payments: PendingPayment[];
+  incomes: Income[];
+  deletedRecords: DeletedRecord[];
+};
+
+/**
+ * Potwierdzenie, że KONKRETNA POSTAĆ rekordu dotarła na serwer.
+ *
+ * `updatedAt` nie jest tu ozdobą. Między odczytem rekordów a potwierdzeniem
+ * wysyłki mija czas — na słabym łączu nawet kilkanaście sekund — i użytkownik
+ * może w tym czasie poprawić kwotę wydatku, który właśnie poleciał. Zgaszenie
+ * znacznika po samym `uuid` skasowałoby wtedy ślad po TEJ poprawce, a serwer
+ * zostałby ze starą kwotą już na zawsze: rekord nie jest oznaczony, więc nic
+ * go ponownie nie wyśle.
+ *
+ * Warunek `WHERE uuid = ? AND updatedAt = ?` gasi znacznik wyłącznie wtedy,
+ * gdy rekord jest nadal dokładnie tym, co wysłano.
+ */
+export type SyncedMark = {
+  uuid: string;
+  updatedAt: string;
+};
+
+/**
+ * Co zostało wysłane. Kategorie idą samym `uuid`, bo jako jedyna encja
+ * nie mają znacznika czasu zmiany — zmiana nazwy kategorii w trakcie wysyłki
+ * może więc przepaść do następnego zapisu. Świadome uproszczenie: kategorie
+ * zmienia się rzadko, a dołożenie im `updatedAt` to migracja schematu.
+ */
+export type SyncedMarks = {
+  categories: string[];
+  billTemplates: SyncedMark[];
+  subscriptions: SyncedMark[];
+  payments: SyncedMark[];
+  incomes: SyncedMark[];
+  deletedRecords: { entityType: DeletedRecord['entityType']; uuid: string }[];
+};
+
 /** Podkategoria wraz z jej sumą w wybranym miesiącu (5.4). */
 export type CategoryTotal = {
   category: Category;
@@ -281,6 +359,25 @@ export interface ExpensesRepository {
    * żadnego śladu poza tą listą.
    */
   listDeletedRecords(): Promise<DeletedRecord[]>;
+
+  /**
+   * Etap 14c: rekordy, których serwer jeszcze nie widział w tej postaci.
+   *
+   * Zwraca WSZYSTKO naraz, a nie stronami. Przy pierwszej synchronizacji to
+   * cała historia wydatków — przy kilku tysiącach rekordów nadal ułamek
+   * megabajta, czyli mniej niż jedno zdjęcie paragonu. Dzielenie na strony
+   * dołożymy, gdy będzie po co, a nie na zapas.
+   */
+  listPendingChanges(): Promise<PendingChanges>;
+
+  /**
+   * Gasi znacznik „do wysłania" przy rekordach, które dotarły na serwer.
+   *
+   * Wywoływane PO potwierdzeniu zapisu przez serwer, nigdy przed. Odwrotna
+   * kolejność gubiłaby dane po cichu: zgaszony znacznik przy nieudanej
+   * wysyłce znaczy, że nic już tego rekordu nie wyśle.
+   */
+  markSynced(marks: SyncedMarks): Promise<void>;
 
   exportSnapshot(): Promise<BackupSnapshot>;
 
