@@ -42,6 +42,16 @@ npm start
 Potem `w`, żeby otworzyć wersję webową w przeglądarce, albo zeskanuj kod QR
 aplikacją **Expo Go**.
 
+Na Windowsie wygodniej jest użyć gotowego skrótu `.start-app.cmd` — dokłada
+Node.js do `PATH` i wymusza tryb Expo Go.
+
+> **Telefon nie łączy się z komputerem?** Objaw jest mylący: Expo Go próbuje
+> i po chwili się poddaje, bez żadnego błędu. Znaczy to, że router nie
+> przepuszcza ruchu między telefonem a komputerem — częste, gdy komputer jest
+> na kablu, a telefon po Wi-Fi. Użyj wtedy `.start-app-tunel.cmd`, który
+> prowadzi połączenie przez serwery Expo i nie wymaga wspólnej sieci.
+> Raz na maszynę trzeba do tego `npm install -g @expo/ngrok@^4.1.0`.
+
 > **Uwaga:** skanowanie paragonów nie zadziała w Expo Go — wymaga modułu
 > natywnego, którego tam nie ma. Potrzebna jest własna wersja aplikacji
 > (patrz [Budowanie](#budowanie-aplikacji)).
