@@ -4,9 +4,19 @@ import type { Payment } from '@/domain/models';
 
 import { groupPaymentsByMonth } from './group-by-month';
 
+/**
+ * Identyfikator wyliczony z numeru rekordu.
+ *
+ * Testy porównują całe rekordy ze sobą, więc losowy identyfikator sprawiłby,
+ * że ten sam rekord zbudowany dwa razy przestałby być równy sam sobie.
+ * Zera z przodu dają 32 znaki, czyli kształt, jakiego wymaga `isUuid`.
+ */
+const testUuid = (id: number): string => String(id).padStart(32, '0');
+
 function makePayment(id: number, effectiveDate: string, amountGrosze: number): Payment {
   return {
     id,
+    uuid: testUuid(id),
     mainType: MainType.PURCHASE,
     categoryId: 1,
     title: `Zakup ${id}`,

@@ -25,8 +25,9 @@ import {
   type SavedReport,
 } from '@/domain/analysis';
 import { BillStatus, FrequencyType, MainType, PaymentMethod, PaymentSource } from '@/domain/enums';
-import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
+import type { BackupSnapshot, DeletedRecord, GeneratedRecord } from '@/domain/backup';
 import type { BillTemplate, Category, Income, Payment, Subscription } from '@/domain/models';
+import { isUuid, newUuid } from '@/lib/uuid';
 
 /**
  * Wersja FORMATU pliku, nie wersja aplikacji ani schematu bazy.
@@ -37,13 +38,14 @@ import type { BillTemplate, Category, Income, Payment, Subscription } from '@/do
  * Wersja 1: bez dochodów domowników.
  * Wersja 2: z dochodami (Etap 11).
  * Wersja 3: z zapisanymi zestawieniami (Etap 13).
+ * Wersja 4: z trwałymi identyfikatorami i śladem po skasowanych (Etap 14b).
  *
  * Kopie w wersjach 1 i 2 nadal się wczytują — brakująca lista znaczy
  * „nie było ich wtedy", czyli pusta. To jest właśnie powód, dla którego
  * plik nosi numer wersji: pozwala starym kopiom zachować ważność zamiast
  * unieważniać je przy każdej nowej funkcji.
  */
-export const BACKUP_FORMAT_VERSION = 3;
+export const BACKUP_FORMAT_VERSION = 4;
 
 /** Znacznik pozwalający odróżnić naszą kopię od dowolnego innego pliku JSON. */
 export const BACKUP_APP_ID = 'domowe-wydatki';
@@ -122,6 +124,27 @@ const isIsoDate = (value: unknown): value is string =>
 const isOneOf = <T extends string>(value: unknown, allowed: Record<string, T>): value is T =>
   isString(value) && Object.prototype.hasOwnProperty.call(allowed, value);
 
+/**
+ * Trwały identyfikator z pliku kopii (Etap 14b).
+ *
+ * Rozróżniamy dwa przypadki, bo znaczą co innego:
+ *
+ *   * pola NIE MA — kopia powstała przed Etapem 14b, kiedy identyfikatory
+ *     jeszcze nie istniały. To poprawny, stary plik. Nadajemy nowy
+ *     identyfikator: dla synchronizacji ten rekord jest i tak nowy,
+ *     bo serwer nigdy go nie widział;
+ *
+ *   * pole JEST, ale nie wygląda jak identyfikator — plik jest uszkodzony
+ *     albo ktoś go ręcznie zmieniał. Zwracamy `null`, czyli odmowę.
+ *     Cofnięcie się tutaj do losowania byłoby najgorsze z możliwych:
+ *     dwa telefony odtworzyłyby tę samą kopię pod różnymi identyfikatorami
+ *     i po synchronizacji każdy wydatek istniałby dwa razy.
+ */
+function readUuid(value: unknown): string | null {
+  if (value === undefined) return newUuid();
+  return isUuid(value) ? value : null;
+}
+
 // --- Sprawdzanie rekordów ----------------------------------------------
 
 function readCategory(value: unknown): Category | null {
@@ -133,8 +156,12 @@ function readCategory(value: unknown): Category | null {
   if (typeof isActive !== 'boolean' || !isInt(sortOrder)) return null;
   if (!Array.isArray(usedBy) || !usedBy.every((entry) => isOneOf(entry, MainType))) return null;
 
+  const uuid = readUuid(value.uuid);
+  if (uuid === null) return null;
+
   return {
     id,
+    uuid,
     name,
     iconKey,
     isActive,
@@ -162,8 +189,12 @@ function readPayment(value: unknown): Payment | null {
   if (!isNullOr(v.receiptImagePath, isString)) return null;
   if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
 
+  const uuid = readUuid(v.uuid);
+  if (uuid === null) return null;
+
   return {
     id: v.id,
+    uuid,
     mainType: v.mainType,
     categoryId: v.categoryId,
     title: v.title,
@@ -195,8 +226,12 @@ function readBillTemplate(value: unknown): BillTemplate | null {
   if (!isNullOr(v.fixedAmountGrosze, isInt)) return null;
   if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
 
+  const uuid = readUuid(v.uuid);
+  if (uuid === null) return null;
+
   return {
     id: v.id,
+    uuid,
     name: v.name,
     categoryId: v.categoryId,
     defaultDueDay: v.defaultDueDay,
@@ -222,8 +257,12 @@ function readSubscription(value: unknown): Subscription | null {
   if (!isInt(v.confirmationIntervalMonths)) return null;
   if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
 
+  const uuid = readUuid(v.uuid);
+  if (uuid === null) return null;
+
   return {
     id: v.id,
+    uuid,
     name: v.name,
     amountGrosze: v.amountGrosze,
     frequencyType: v.frequencyType,
@@ -254,14 +293,42 @@ function readIncome(value: unknown): Income | null {
   if (!isYearMonth(v.month)) return null;
   if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
 
+  const uuid = readUuid(v.uuid);
+  if (uuid === null) return null;
+
   return {
     id: v.id,
+    uuid,
     personName: v.personName,
     amountGrosze: v.amountGrosze,
     month: v.month,
     createdAt: v.createdAt,
     updatedAt: v.updatedAt,
   };
+}
+
+/** Etap 14b: jeden wpis listy skasowanych rekordów. */
+const DELETED_ENTITY_TYPES: Record<string, DeletedRecord['entityType']> = {
+  PAYMENT: 'PAYMENT',
+  CATEGORY: 'CATEGORY',
+  BILL_TEMPLATE: 'BILL_TEMPLATE',
+  SUBSCRIPTION: 'SUBSCRIPTION',
+  INCOME: 'INCOME',
+};
+
+function readDeletedRecord(value: unknown): DeletedRecord | null {
+  if (!isObject(value)) return null;
+
+  const v = value;
+
+  if (!isOneOf(v.entityType, DELETED_ENTITY_TYPES)) return null;
+  // Tutaj identyfikator jest OBOWIĄZKOWY i nie wolno go dolosować: cała
+  // treść tego wpisu to wskazanie, który rekord zniknął. Wpis ze zmyślonym
+  // identyfikatorem nie kasowałby niczego, a wyglądałby na poprawny.
+  if (!isUuid(v.uuid)) return null;
+  if (!isString(v.deletedAt)) return null;
+
+  return { entityType: v.entityType, uuid: v.uuid, deletedAt: v.deletedAt };
 }
 
 function readSavedReport(value: unknown): SavedReport | null {
@@ -369,6 +436,11 @@ export function parseBackup(text: string): BackupParseResult {
   // zanim istniały, więc ich brak to nie uszkodzenie.
   const savedReports = s.savedReports === undefined ? [] : readAll(s.savedReports, readSavedReport);
 
+  // I dla śladu po skasowanych z Etapu 14b. Pusta lista w starej kopii znaczy
+  // „ta wersja aplikacji nie zapisywała kasowania", a nie „nic nie skasowano".
+  const deletedRecords =
+    s.deletedRecords === undefined ? [] : readAll(s.deletedRecords, readDeletedRecord);
+
   if (
     categories === null ||
     payments === null ||
@@ -376,7 +448,8 @@ export function parseBackup(text: string): BackupParseResult {
     subscriptions === null ||
     generatedRecords === null ||
     incomes === null ||
-    savedReports === null
+    savedReports === null ||
+    deletedRecords === null
   ) {
     return { ok: false, reason: 'DAMAGED' };
   }
@@ -395,6 +468,7 @@ export function parseBackup(text: string): BackupParseResult {
         generatedRecords,
         incomes,
         savedReports,
+        deletedRecords,
       },
     },
   };

@@ -68,8 +68,8 @@ const ICONS: Record<string, string> = {
 };
 
 /** 7.1: buduje pełną listę kategorii z kolejnymi identyfikatorami. */
-export function buildDemoCategories(): Category[] {
-  const categories: Category[] = [];
+export function buildDemoCategories(): DemoCategory[] {
+  const categories: DemoCategory[] = [];
   let id = 1;
 
   const add = (usedBy: MainType[], names: string[]) => {
@@ -94,7 +94,7 @@ export function buildDemoCategories(): Category[] {
 }
 
 /** Znajduje identyfikator kategorii po nazwie i typie, który z niej korzysta. */
-function categoryId(categories: Category[], mainType: MainType, name: string): number {
+function categoryId(categories: DemoCategory[], mainType: MainType, name: string): number {
   const found = categories.find((c) => c.usedBy.includes(mainType) && c.name === name);
   if (!found) throw new Error(`Brak kategorii demonstracyjnej: ${mainType} / ${name}`);
   return found.id;
@@ -120,13 +120,25 @@ const TEMPLATE_CREATED_AT = (() => {
 })();
 
 /** Płatność demonstracyjna bez pól nadawanych przez repozytorium. */
-export type PaymentSeed = Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>;
+/**
+ * Dane demonstracyjne nie nadają `uuid` (Etap 14b).
+ *
+ * Ten plik opisuje, JAK MAJĄ WYGLĄDAĆ przykładowe wydatki — nie tworzy
+ * rekordów. Trwały identyfikator nadaje ten, kto je zapisuje: repozytorium
+ * pamięciowe przy wczytaniu, a w wersji na SQLite wyzwalacz z migracji 3.
+ * Nadanie go tutaj wyglądałoby, jakby dwa konkretne wydatki miały z góry
+ * ustalone identyfikatory — a nie mają i mieć nie powinny.
+ */
+export type DemoCategory = Omit<Category, 'uuid'>;
+export type DemoBillTemplate = Omit<BillTemplate, 'id' | 'uuid'>;
+export type DemoSubscription = Omit<Subscription, 'id' | 'uuid'>;
+export type PaymentSeed = Omit<Payment, 'id' | 'uuid' | 'createdAt' | 'updatedAt'>;
 
 /**
  * Buduje płatności demonstracyjne dla bieżącego i poprzedniego miesiąca.
  * Kwoty podane w groszach (BR-03).
  */
-function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
+function buildDemoPaymentSeeds(categories: DemoCategory[]): PaymentSeed[] {
   const thisMonth = currentYearMonth();
   const lastMonth = addMonths(thisMonth, -1);
 
@@ -255,7 +267,7 @@ function buildDemoPaymentSeeds(categories: Category[]): PaymentSeed[] {
 }
 
 /** 7.3: szablony rachunków cyklicznych. */
-function buildDemoBillTemplates(categories: Category[]): Omit<BillTemplate, 'id'>[] {
+function buildDemoBillTemplates(categories: DemoCategory[]): DemoBillTemplate[] {
   const billCategoryId = categoryId(categories, MainType.BILL, BILL_CATEGORY_NAME);
 
   const template = (
@@ -285,7 +297,7 @@ function buildDemoBillTemplates(categories: Category[]): Omit<BillTemplate, 'id'
 }
 
 /** 7.4: subskrypcje. */
-function buildDemoSubscriptions(categories: Category[]): Omit<Subscription, 'id'>[] {
+function buildDemoSubscriptions(categories: DemoCategory[]): DemoSubscription[] {
   const thisMonth = currentYearMonth();
   const nextMonth = addMonths(thisMonth, 1);
   const subCat = (name: string) => categoryId(categories, MainType.SUBSCRIPTION, name);
@@ -296,7 +308,7 @@ function buildDemoSubscriptions(categories: Category[]): Omit<Subscription, 'id'
     amountGrosze: number,
     day: number,
     startedMonthsAgo: number
-  ): Omit<Subscription, 'id'> => ({
+  ): DemoSubscription => ({
     name,
     amountGrosze,
     frequencyType: FrequencyType.MONTHLY,

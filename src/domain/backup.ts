@@ -40,6 +40,23 @@ export type GeneratedRecord = {
   month: number;
 };
 
+/**
+ * Ślad po rekordzie skasowanym przez użytkownika (Etap 14b).
+ *
+ * DLACZEGO KOPIA ZAPASOWA NIESIE TEŻ TO, CZEGO JUŻ NIE MA:
+ * Skasowany wydatek zniknął z tego telefonu, ale niekoniecznie z serwera
+ * i z drugiego telefonu. Kopia bez tej listy odtworzyłaby stan, w którym
+ * aplikacja nie wie już, że coś skasowano — a wtedy przy najbliższej
+ * synchronizacji drugi telefon przysłałby te rekordy z powrotem jako nowe.
+ * Kasowanie przestałoby być trwałe, i to bez żadnego komunikatu.
+ */
+export type DeletedRecord = {
+  entityType: 'PAYMENT' | 'CATEGORY' | 'BILL_TEMPLATE' | 'SUBSCRIPTION' | 'INCOME';
+  /** Trwały identyfikator rekordu, którego już nie ma. */
+  uuid: string;
+  deletedAt: string;
+};
+
 /** Komplet danych aplikacji w jednym miejscu. */
 export type BackupSnapshot = {
   categories: Category[];
@@ -57,6 +74,13 @@ export type BackupSnapshot = {
    * musiałby wyklikać je od nowa, nie mając nawet jak sprawdzić, jakie miał.
    */
   savedReports: SavedReport[];
+  /**
+   * Etap 14b: rekordy skasowane przez użytkownika.
+   *
+   * Kopie sprzed Etapu 14b tej listy nie mają — czytnik podstawia wtedy
+   * pustą, co znaczy „nic nie wiadomo o kasowaniu", a nie „nic nie skasowano".
+   */
+  deletedRecords: DeletedRecord[];
 };
 
 /** Ile rekordów każdego rodzaju zawiera migawka — do pokazania użytkownikowi. */

@@ -50,19 +50,35 @@ export default function HomeScreen() {
         Wejście do kopii zapasowej (Etap 10). Stoi na ekranie głównym, a nie
         schowane w podekranie, bo funkcja, o której użytkownik nie pamięta,
         nie chroni jego danych.
+
+        Obok niej konto (Etap 14a). Kolejność jest celowa: kopia zapasowa
+        stoi bliżej nazwy aplikacji, bo dziś to ona — a nie konto — jest
+        jedynym zabezpieczeniem danych.
       */}
       <View style={styles.header}>
         <Text style={styles.appName}>{strings.app.name}</Text>
 
-        <Pressable
-          onPress={() => router.push('/backup')}
-          accessibilityRole="button"
-          accessibilityLabel={strings.backup.openFromHome}
-          hitSlop={spacing.sm}
-          style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
-        >
-          <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={() => router.push('/backup')}
+            accessibilityRole="button"
+            accessibilityLabel={strings.backup.openFromHome}
+            hitSlop={spacing.sm}
+            style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/account')}
+            accessibilityRole="button"
+            accessibilityLabel={strings.account.openFromHome}
+            hitSlop={spacing.sm}
+            style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
+          >
+            <Ionicons name="person-circle-outline" size={20} color={colors.primary} />
+          </Pressable>
+        </View>
       </View>
 
       <MonthSwitcher />
@@ -113,6 +129,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize.label,
     fontWeight: '700',
     color: colors.text,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   headerButton: {
     width: 40,

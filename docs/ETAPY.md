@@ -730,6 +730,12 @@ kilkudziesięciu.
 Model i format kopii rozszerzymy dopiero wtedy, gdy powstanie prawdziwa
 synchronizacja — do tego czasu kolumna czeka wypełniona.
 
+> **Dopisane po Etapie 14b (08.09.2026):** ten moment nastąpił. `uuid` należy
+> dziś do typów, a kopia zapasowa go niesie. Przewidywana cena okazała się
+> trafna co do rodzaju: poprawki dotknęły dziewięciu plików z testami.
+> Wyzwalacz z tej migracji zostaje jako zabezpieczenie zapisów, które
+> o kolumnie zapomną.
+
 ### Trzy formy liczby mnogiej
 
 „Ostatnie 3 miesięcy" albo „ostatnie 22 miesiące" to nie jest drobiazg
@@ -761,7 +767,225 @@ usuwa wielokropki pod osią. Pomiar mówi, że tak (najszerszy podpis 26,7 px
 przy słupku 32 px), ale wielokropki wyszły właśnie z różnicy między czcionką
 przeglądarki a systemową czcionką Androida.
 
-## Etap 14 — do rozstrzygnięcia 🔜
+## Etap 14 — synchronizacja dwóch telefonów (Supabase)
+
+Decyzja właściciela projektu (08.09.2026): drugi telefon ma widzieć te same
+wydatki. Specyfikacja wypycha synchronizację i konta poza MVP (3.2, P2), ale
+8.2 wprost dopuszcza późniejsze zastąpienie repozytorium lokalnego chmurowym —
+i po to powstał interfejs `ExpensesRepository`.
+
+**Wybrany wariant: SQLite pozostaje bazą główną, Supabase jest lustrem.**
+Aplikacja ma działać bez internetu, bo wydatek wpisuje się przy kasie.
+Wariant „Supabase zamiast SQLite" odrzucony z tego jednego powodu.
+
+Podział na cztery etapy, bo każdy z nich osobno kończy się działającą
+aplikacją (zasada 4 z `AGENTS.md`):
+
+| Etap | Zakres                                                       | Widoczne dla użytkownika            |
+| ---- | ------------------------------------------------------------ | ----------------------------------- |
+| 14a  | Klient Supabase, logowanie, ekran konta                      | Nowy ekran „Konto"                  |
+| 14b  | `uuid` w modelach, ślad po skasowanych, znacznik do wysłania | Nic — przebudowa fundamentu         |
+| 14c  | Tabele na serwerze + RLS, wysyłka zmian                      | Przycisk „Synchronizuj"             |
+| 14d  | Pobieranie, scalanie, rozstrzyganie konfliktów               | Drugi telefon widzi dane pierwszego |
+
+### Etap 14a — konto i logowanie ✅ ZAKOŃCZONY
+
+- [x] `@supabase/supabase-js` + `expo-secure-store` (wersje pod SDK 54)
+- [x] Odczyt konfiguracji z `.env` — `src/data/supabase/config.ts`
+- [x] Magazyn sesji dzielony na kawałki — `src/data/supabase/session-storage.ts`
+- [x] Klient tworzony leniwie — `src/data/supabase/client.ts`
+- [x] Stan konta w kontekście — `src/features/auth/auth-context.tsx`
+- [x] Tłumaczenie błędów serwera na polskie powody — `auth-errors.ts`
+- [x] Ekran konta z czterema stanami — `src/app/account.tsx`
+- [x] 27 nowych testów jednostkowych (razem 388, wszystkie przechodzą)
+
+**Etap 14a NIE RUSZA DANYCH.** Zalogowanie niczego nie wysyła ani nie pobiera.
+Ekran mówi to wprost, w żółtej ramce widocznej także po zalogowaniu — patrz
+niżej, dlaczego to nie jest nadmiarowa ostrożność.
+
+#### Ostrzeżenie o niedziałającej synchronizacji zostaje na ekranie ZAWSZE
+
+Kusiło, żeby po zalogowaniu je schować — wygląda jak usterka do naprawienia
+w następnym etapie. Zostaje, bo napis „Jesteś zalogowany" w aplikacji do
+wydatków czyta się jako „dane są bezpieczne w chmurze". Człowiek, który tak
+to zrozumie, przestanie robić kopie zapasowe — a kopia jest dziś jedynym
+zabezpieczeniem danych. Cena pomyłki jest niesymetryczna: nadmiarowe zdanie
+kosztuje chwilę czytania, brakujące kosztuje utratę całej historii wydatków.
+
+#### Sesja dzielona na kawałki, a nie zapisana w całości
+
+Dokumentacja Expo ostrzega, że SecureStore bywa odmawia przyjęcia wartości
+powyżej ~2048 bajtów, a sesja Supabase (dwa tokeny JWT plus dane konta)
+bywa dłuższa. Awaria byłaby podstępna: logowanie pozornie działa, a przy
+następnym uruchomieniu aplikacja wraca do ekranu logowania bez wyjaśnienia.
+`session-storage.ts` trzyma pod kluczem samą liczbę kawałków, a treść pod
+`klucz.0`, `klucz.1`. Test pilnuje, żeby ŻADEN pojedynczy wpis nie przekroczył
+limitu.
+
+Logika dzielenia jest oddzielona od SecureStore tym samym szwem, co baza
+(`expo-adapter` / `node-adapter`) — dzięki temu sprawdza ją 14 testów w Node,
+bez telefonu.
+
+#### Adres projektu jest obcinany z końcówki `/rest/v1`
+
+Panel Supabase pokazuje obok siebie adres projektu i adres końcówki REST,
+i przy pierwszym podłączeniu skopiowany został ten drugi. Biblioteka dokleja
+`/rest/v1` sama, więc taki adres dałby zapytania pod `/rest/v1/rest/v1/...` —
+czyli błąd 404 przy każdej operacji, z komunikatem nieprowadzącym do przyczyny.
+`normalizeProjectUrl` obcina tę końcówkę i cztery pokrewne.
+
+#### Brak pliku `.env` nie jest błędem
+
+Repozytorium jest publiczne. Kto je sklonuje, nie dostanie `.env` i nie ma
+własnego projektu w chmurze — aplikacja ma mu się uruchomić i działać na
+lokalnej bazie. `readSupabaseConfig` zwraca wtedy `null`, ekran konta pokazuje
+„Konto niedostępne", a cała reszta działa bez zmian.
+
+#### Sprawdzone w działającej aplikacji
+
+| Sprawdzenie                         | Wynik                                              |
+| ----------------------------------- | -------------------------------------------------- |
+| `npm run typecheck`                 | czysty                                             |
+| `npm run lint`                      | czysty                                             |
+| `npm test`                          | 388 testów, 21 zestawów — wszystkie przechodzą     |
+| `npx expo export --platform web`    | build przechodzi, trasa `/account` w wyniku        |
+| Wczytanie `.env` przez Metro        | ekran pokazał formularz, a nie „Konto niedostępne" |
+| Walidacja pustego formularza        | „Wypełnij oba pola."                               |
+| Przełącznik logowanie ↔ rejestracja | działa, zachowuje wpisany adres                    |
+
+**Do sprawdzenia na fizycznym telefonie:** założenie konta, przyjście listu
+potwierdzającego, zalogowanie, przeżycie sesji przez zamknięcie aplikacji
+i wylogowanie. Weryfikacja w przeglądarce nie obejmuje SecureStore — w wersji
+webowej sesja idzie do `localStorage`, więc dzielenie na kawałki i Keystore
+sprawdzą się dopiero na Androidzie.
+
+### Etap 14b — trwałe identyfikatory ✅ ZAKOŃCZONY
+
+- [x] `uuid` wchodzi do typów `Payment`, `Category`, `BillTemplate`,
+      `Subscription`, `Income` — spłata długu świadomie zaciągniętego w Etapie 13
+- [x] Generator identyfikatorów — `src/lib/uuid.ts`
+- [x] Tabela skasowanych rekordów `deleted_record` z wyzwalaczami
+- [x] Znacznik `pendingSync` przy każdym zapisie, podnoszony wyzwalaczem
+- [x] Migracja 3 → 4
+- [x] Format kopii zapasowej w wersji 4 — z identyfikatorami i śladem
+      po skasowanych; kopie w wersjach 1–3 nadal się wczytują
+- [x] 39 nowych testów (razem 427, wszystkie przechodzą)
+- [ ] ~~Klucze obce między rekordami po `uuid`, nie po lokalnym `id`~~ —
+      **odstąpiono, uzasadnienie niżej**
+
+**Etap 14b NIC NIE ZMIENIA NA EKRANIE.** To przebudowa fundamentu: aplikacja
+wygląda i działa dokładnie tak samo, a różnicę widać dopiero w Etapie 14c.
+
+#### Odstąpienie od kluczy obcych po `uuid`
+
+Plan zakładał przepisanie `categoryId`, `billTemplateId` i `subscriptionId`
+na odpowiedniki po `uuid`. Przy pisaniu okazało się to złym pomysłem.
+
+Zmiana dotknęłaby repozytorium (ponad tysiąc linii), wszystkich ekranów
+i kilkudziesięciu testów — a lokalnej bazie nie dałaby nic. Wewnątrz jednego
+telefonu `INTEGER` jest poprawny i szybszy od porównywania 32 znaków tekstu,
+a wskazuje na niego kilkanaście kolumn i indeksów.
+
+Serwerowi potrzebne są identyfikatory trwałe i będzie je dostawał — tyle że
+z jednego złączenia przy wysyłce:
+
+```sql
+SELECT p.*, c.uuid AS categoryUuid FROM payment p JOIN category c ON c.id = p.categoryId
+```
+
+Tłumaczenie `id` ↔ `uuid` mieszka więc w warstwie synchronizacji (Etap 14c),
+zamiast rozlewać się po całej aplikacji. Cena: przy pobieraniu trzeba wczytywać
+kategorie przed wydatkami, żeby było na co przetłumaczyć obcy `uuid`. To jedno
+zdanie w kodzie synchronizacji wobec przebudowy połowy projektu.
+
+#### Dlaczego `uuid` jest nieobowiązkowy przy tworzeniu
+
+W gotowym rekordzie identyfikator jest wymagany. Przy TWORZENIU podaje się go
+tylko wtedy, gdy rekord ma zachować cudzy: przy odtwarzaniu kopii zapasowej
+i przy pobraniu z serwera. W pozostałych kilkunastu miejscach — formularzach,
+automacie rachunków, danych demonstracyjnych, zasiewie i testach — nadaje go
+baza albo repozytorium.
+
+Gdyby był wymagany, każde z tych miejsc musiałoby zawołać generator, a pominięcie
+jednego przeszłoby przez kompilator dopiero po dopisaniu tam pola z byle jaką
+wartością. Nieobowiązkowe pole odwraca ten układ: kto milczy, dostaje poprawny
+identyfikator.
+
+#### Ślad po skasowanych, czyli dlaczego kasowanie musi zostawiać zapis
+
+Bez tabeli `deleted_record` usunięcie wydatku byłoby nieodwracalne tylko
+z pozoru. Telefon A kasuje wydatek i po prostu przestaje go mieć. Telefon B,
+który nic nie kasował, nadal go ma i wysyła. Telefon A widzi rekord, którego
+u siebie nie zna, uznaje go za nowy i zapisuje z powrotem. Skasowany wydatek
+WRACA — za każdym razem, na obu telefonach, bez żadnego komunikatu.
+
+Nagrobek zapisuje `uuid`, a nie `id`: lokalny numer nic nie znaczy poza tym
+jednym telefonem, a wiersza, do którego należał, już nie ma.
+
+#### Warunek wyzwalacza, który wygląda dziwnie i taki ma być
+
+`AFTER UPDATE ... WHEN old.pendingSync = 0 AND new.pendingSync = 0`.
+Cztery przypadki, wszystkie potrzebne:
+
+| Zmiana                          | Warunek      | Co się dzieje                              |
+| ------------------------------- | ------------ | ------------------------------------------ |
+| edycja czystego rekordu (0 → 0) | spełniony    | znacznik idzie na 1 — o to chodzi          |
+| edycja oznaczonego (1 → 1)      | niespełniony | nie trzeba, już jest 1                     |
+| zgaszenie po wysyłce (1 → 0)    | niespełniony | inaczej wysyłka nigdy by się nie skończyła |
+| zapis samego wyzwalacza (0 → 1) | niespełniony | inaczej wywoływałby sam siebie bez końca   |
+
+Ostatni wiersz jest powodem, dla którego warunek nie brzmi po prostu
+`old.pendingSync = 0`. Testy sprawdzają wszystkie cztery.
+
+#### Wyzwalacze zamiast zmian w zapytaniach
+
+Ta sama decyzja, co przy `uuid` w Etapie 13. Kasowanie i edycja dzieją się
+w kilkunastu miejscach repozytorium i przybędzie ich wraz z synchronizacją.
+Zapomniany jeden `DELETE` nie psuje niczego widocznego — objawia się dopiero
+wracającym wydatkiem, wiele dni później, na drugim urządzeniu. Baza pilnuje
+tego sama, więc nie da się tego pominąć.
+
+Cena: TypeScript nie sprawdzi ani jednego wyzwalacza. Dlatego pilnuje ich
+dziesięć testów w `migrations.test.ts`, a osiem testów kontraktu wymusza,
+żeby wersja pamięciowa — gdzie to samo robi kod klasy — zachowywała się
+identycznie.
+
+#### Kopie zapasowe sprzed Etapu 14b nadal działają
+
+Format pliku ma wersję 4. Brak pola `uuid` znaczy „kopia ze starszej wersji" —
+czytnik nadaje wtedy nowe identyfikatory, bo dla serwera te rekordy i tak są
+nowe. Pole OBECNE, ale uszkodzone, to co innego: odmowa wczytania. Dolosowanie
+identyfikatora w tym miejscu byłoby najgorsze z możliwych — dwa telefony
+odtworzyłyby tę samą kopię pod różnymi identyfikatorami i po synchronizacji
+każdy wydatek istniałby dwa razy.
+
+#### Sprawdzone
+
+| Sprawdzenie                      | Wynik                                         |
+| -------------------------------- | --------------------------------------------- |
+| `npm run typecheck`              | czysty                                        |
+| `npm run lint`                   | czysty                                        |
+| `npm test`                       | 427 testów, 22 zestawy — wszystkie przechodzą |
+| `npx expo export --platform web` | build przechodzi                              |
+
+**Do sprawdzenia na fizycznym telefonie:** aktualizacja aplikacji na bazie
+z prawdziwymi danymi — po migracji 3 → 4 wszystkie wydatki mają być na miejscu.
+Test `aktualizacja ze starej wersji schematu zachowuje dane użytkownika`
+odgrywa to w Node, ale na prawdziwym pliku bazy nikt tego jeszcze nie widział.
+
+### Etap 14c — schemat na serwerze i wysyłka 🔜
+
+- [ ] Tabele w Supabase z kolumną `user_id`
+- [ ] Reguły RLS: `auth.uid() = user_id` — jedyne prawdziwe zabezpieczenie danych
+- [ ] Wysyłka rekordów oznaczonych „do wysłania"
+
+### Etap 14d — pobieranie i scalanie 🔜
+
+- [ ] Pobieranie zmian od znacznika czasu serwera
+- [ ] Konflikt rozstrzyga nowszy zapis (decyzja właściciela projektu, 08.09.2026)
+- [ ] Ekran stanu synchronizacji
+
+## Etap 15 — do rozstrzygnięcia 🔜
 
 Kolejność zależy od tego, co uwiera po kilku tygodniach używania. Kandydaci
 z `docs/PLAN-DALSZY.md`, w kolejności wartości do kosztu:

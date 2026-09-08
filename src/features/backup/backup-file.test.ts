@@ -20,12 +20,21 @@ import {
 
 const CREATED_AT = '2026-08-21T10:30:00.000Z';
 
+/**
+ * Identyfikator wyliczony z numeru rekordu.
+ *
+ * Testy porównują migawkę zbudowaną dwa razy, więc losowy identyfikator
+ * sprawiłby, że ta sama migawka przestałaby być równa sama sobie.
+ */
+const testUuid = (id: number): string => String(id).padStart(32, '0');
+
 /** Migawka z jednym rekordem każdego rodzaju i wszystkimi polami wypełnionymi. */
 function buildSnapshot(): BackupSnapshot {
   return {
     categories: [
       {
         id: 1,
+        uuid: testUuid(1),
         name: 'Rachunki',
         iconKey: 'receipt-outline',
         isActive: true,
@@ -34,6 +43,7 @@ function buildSnapshot(): BackupSnapshot {
       },
       {
         id: 2,
+        uuid: testUuid(2),
         name: 'Rozrywka',
         iconKey: 'game-controller-outline',
         isActive: true,
@@ -44,6 +54,7 @@ function buildSnapshot(): BackupSnapshot {
     payments: [
       {
         id: 10,
+        uuid: testUuid(10),
         mainType: MainType.PURCHASE,
         categoryId: 2,
         title: 'Lidl',
@@ -66,6 +77,7 @@ function buildSnapshot(): BackupSnapshot {
     billTemplates: [
       {
         id: 5,
+        uuid: testUuid(5),
         name: 'Prąd',
         categoryId: 1,
         defaultDueDay: 10,
@@ -79,6 +91,7 @@ function buildSnapshot(): BackupSnapshot {
     subscriptions: [
       {
         id: 7,
+        uuid: testUuid(7),
         name: 'Netflix',
         amountGrosze: 4300,
         frequencyType: FrequencyType.MONTHLY,
@@ -97,6 +110,7 @@ function buildSnapshot(): BackupSnapshot {
     incomes: [
       {
         id: 3,
+        uuid: testUuid(3),
         personName: 'Ola',
         amountGrosze: 620000,
         month: '2026-08',
@@ -116,6 +130,7 @@ function buildSnapshot(): BackupSnapshot {
         updatedAt: CREATED_AT,
       },
     ],
+    deletedRecords: [{ entityType: 'PAYMENT', uuid: testUuid(99), deletedAt: CREATED_AT }],
   };
 }
 
@@ -161,6 +176,7 @@ describe('plik kopii zapasowej', () => {
         generatedRecords: [],
         incomes: [],
         savedReports: [],
+        deletedRecords: [],
       };
 
       const result = roundTrip(empty);
@@ -458,5 +474,127 @@ describe('plik kopii zapasowej', () => {
 
       expect(parseBackup(JSON.stringify(raw))).toEqual({ ok: false, reason: 'DAMAGED' });
     });
+  });
+});
+
+/**
+ * Etap 14b: trwałe identyfikatory i ślad po skasowanych w pliku kopii.
+ *
+ * Kopia zapasowa jest jedynym miejscem, w którym dane wracają do aplikacji
+ * Z ZEWNĄTRZ. Wszystko inne przychodzi z własnej bazy albo własnych
+ * formularzy. Dlatego identyfikatorów pilnujemy tutaj tak samo drobiazgowo
+ * jak kwot — z tą różnicą, że błąd w identyfikatorze nie jest widoczny
+ * od razu: ujawnia się przy synchronizacji, jako rozdwojony albo wracający
+ * wydatek, wiele dni po odtworzeniu kopii.
+ */
+describe('trwałe identyfikatory w kopii (Etap 14b)', () => {
+  /** Buduje kopię po usunięciu wskazanych pól — odgrywa plik ze starszej wersji. */
+  function withoutFields(usun: (snapshot: Record<string, unknown>) => void): string {
+    const raw = JSON.parse(serializeBackup(buildSnapshot(), CREATED_AT));
+    usun(raw.snapshot);
+    return JSON.stringify(raw);
+  }
+
+  it('identyfikator przeżywa zapis i odczyt bez zmiany', () => {
+    const result = roundTrip(buildSnapshot());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.snapshot.payments[0].uuid).toBe(buildSnapshot().payments[0].uuid);
+    expect(result.file.snapshot.categories[0].uuid).toBe(buildSnapshot().categories[0].uuid);
+  });
+
+  it('kopia sprzed Etapu 14b wczytuje się, a rekordy dostają identyfikatory', () => {
+    // Użytkownik ma na telefonie kopie zrobione starszą wersją aplikacji.
+    // Odrzucenie ich zabrałoby mu jedyne zabezpieczenie danych, jakie ma.
+    const text = withoutFields((snapshot) => {
+      for (const lista of ['categories', 'payments', 'billTemplates', 'subscriptions', 'incomes']) {
+        for (const rekord of snapshot[lista] as Record<string, unknown>[]) {
+          delete rekord.uuid;
+        }
+      }
+    });
+
+    const result = parseBackup(text);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.snapshot.payments[0].uuid).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.file.snapshot.categories[0].uuid).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.file.snapshot.incomes[0].uuid).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('każdy rekord starej kopii dostaje WŁASNY identyfikator', () => {
+    const text = withoutFields((snapshot) => {
+      for (const rekord of snapshot.categories as Record<string, unknown>[]) delete rekord.uuid;
+    });
+
+    const result = parseBackup(text);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const [first, second] = result.file.snapshot.categories;
+    expect(first.uuid).not.toBe(second.uuid);
+  });
+
+  it('odrzuca kopię z uszkodzonym identyfikatorem', () => {
+    // Obecne, ale bezsensowne pole to co innego niż jego brak: znaczy, że plik
+    // jest uszkodzony. Dolosowanie identyfikatora w tym miejscu byłoby
+    // najgorsze z możliwych — dwa telefony odtworzyłyby tę samą kopię pod
+    // różnymi identyfikatorami i każdy wydatek istniałby po synchronizacji
+    // dwa razy.
+    for (const zle of ['', 'nie-jest-identyfikatorem', 'ABCDEF', 42, null]) {
+      const text = corrupted((raw) => {
+        const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+        (snapshot.payments as Record<string, unknown>[])[0].uuid = zle;
+      });
+
+      expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
+    }
+  });
+
+  it('ślad po skasowanych przeżywa zapis i odczyt', () => {
+    const result = roundTrip(buildSnapshot());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.snapshot.deletedRecords).toEqual(buildSnapshot().deletedRecords);
+  });
+
+  it('kopia bez listy skasowanych wczytuje się z pustą listą', () => {
+    const text = withoutFields((snapshot) => {
+      delete snapshot.deletedRecords;
+    });
+
+    const result = parseBackup(text);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.snapshot.deletedRecords).toEqual([]);
+  });
+
+  it('odrzuca wpis o skasowaniu bez poprawnego identyfikatora', () => {
+    // Tutaj identyfikator to CAŁA treść wpisu. Dolosowany nie kasowałby
+    // niczego, a wyglądałby na poprawny.
+    const text = corrupted((raw) => {
+      const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+      delete (snapshot.deletedRecords as Record<string, unknown>[])[0].uuid;
+    });
+
+    expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
+  });
+
+  it('odrzuca wpis o skasowaniu nieznanego rodzaju rekordu', () => {
+    const text = corrupted((raw) => {
+      const snapshot = (raw as Record<string, Record<string, unknown>>).snapshot;
+      (snapshot.deletedRecords as Record<string, unknown>[])[0].entityType = 'COŚ_INNEGO';
+    });
+
+    expect(parseBackup(text)).toEqual({ ok: false, reason: 'DAMAGED' });
   });
 });

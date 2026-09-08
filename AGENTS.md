@@ -42,6 +42,28 @@ Aplikacja nie przestanie działać w żadnym z tych przypadków: gdy moduł
 natywny jest niedostępny, `createOcrService()` sam wraca do silnika
 demonstracyjnego, a ekran o tym informuje.
 
+## Konto i chmura (Etap 14) — plik `.env`
+
+Od Etapu 14a aplikacja umie zalogować się do projektu Supabase. Dwie wartości
+czyta z `.env`, którego git NIE śledzi:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://twojprojekt.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+Wzorzec z opisem leży w `.env.example`. **Bez tego pliku aplikacja działa
+normalnie** — na lokalnej bazie, bez konta; ekran „Konto" mówi wtedy
+„Konto niedostępne". Repozytorium jest publiczne i tak ma zostać.
+
+Klucz `publishable` jest jawny z założenia. Danych pilnują reguły RLS po
+stronie serwera. **Nigdy nie wstawiaj do `.env` klucza `service_role`** —
+ten omija wszystkie reguły i trafiłby do zbudowanej aplikacji jako zwykły tekst.
+
+`process.env.EXPO_PUBLIC_*` czytaj WYŁĄCZNIE pełnym zapisem, nigdy przez
+zmienną: Metro podmienia go na tekst podczas budowania i odczyt pośredni
+zwróci `undefined` w aplikacji, działając poprawnie w testach.
+
 ## Zasady, których nie wolno złamać
 
 1. **Kwoty tylko w groszach.** BR-03. `125,50 zł` to `12550`. Nigdy nie używaj liczb

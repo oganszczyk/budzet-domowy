@@ -11,7 +11,7 @@
  */
 
 import type { SavedReport } from '@/domain/analysis';
-import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
+import type { BackupSnapshot, DeletedRecord, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
 import type {
@@ -30,6 +30,7 @@ import {
   yearMonthOf,
   type YearMonth,
 } from '@/lib/date';
+import { newUuid } from '@/lib/uuid';
 
 import { buildDemoData } from './demo-data';
 import type {
@@ -77,16 +78,29 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.reset();
   }
 
+  /**
+   * Etap 14b: ślad po skasowanych rekordach.
+   *
+   * W wersji na SQLite tę listę prowadzą wyzwalacze z migracji 4. Tutaj musi
+   * ją prowadzić kod — i właśnie dlatego obie wersje przechodzą ten sam
+   * zestaw testów: różnica w takim szczególe jest dokładnie tym rodzajem
+   * rozjazdu, który inaczej wyszedłby dopiero na telefonie.
+   */
+  private deletedRecords: DeletedRecord[] = [];
+
   /** Wczytuje dane demonstracyjne od zera. */
   reset(): void {
     const demo = buildDemoData();
     const now = new Date().toISOString();
 
-    this.categories = demo.categories;
+    // Dane demonstracyjne opisują wydatki, nie rekordy — trwały identyfikator
+    // nadaje ten, kto je zapisuje. Tutaj tym zapisującym jest ta klasa.
+    this.categories = demo.categories.map((category) => ({ ...category, uuid: newUuid() }));
     this.nextCategoryId = this.categories.reduce((max, c) => Math.max(max, c.id), 0) + 1;
     this.nextPaymentId = 1;
     this.payments = demo.paymentSeeds.map((seed) => ({
       ...seed,
+      uuid: newUuid(),
       id: this.nextPaymentId++,
       createdAt: now,
       updatedAt: now,
@@ -94,8 +108,10 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.nextBillTemplateId = 1;
     this.billTemplates = demo.billTemplates.map((template) => ({
       ...template,
+      uuid: newUuid(),
       id: this.nextBillTemplateId++,
     }));
+    this.deletedRecords = [];
     this.incomes = [];
     this.nextIncomeId = 1;
     this.savedReports = [];
@@ -103,6 +119,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.nextSubscriptionId = 1;
     this.subscriptions = demo.subscriptions.map((subscription) => ({
       ...subscription,
+      uuid: newUuid(),
       id: this.nextSubscriptionId++,
     }));
 
@@ -201,6 +218,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
     const category: Category = {
       ...input,
+      uuid: input.uuid ?? newUuid(),
       id: this.nextCategoryId++,
       sortOrder: input.sortOrder ?? maxSortOrder + 1,
     };
@@ -230,6 +248,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const payment: Payment = {
       ...input,
+      uuid: input.uuid ?? newUuid(),
       id: this.nextPaymentId++,
       createdAt: now,
       updatedAt: now,
@@ -253,7 +272,11 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   }
 
   async deletePayment(id: number): Promise<void> {
+    const removed = this.payments.find((p) => p.id === id);
+    if (!removed) return;
+
     this.payments = this.payments.filter((p) => p.id !== id);
+    this.recordDeletion('PAYMENT', removed.uuid);
   }
 
   // --- Szablony rachunków (7.3) ---
@@ -270,6 +293,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const template: BillTemplate = {
       ...input,
+      uuid: input.uuid ?? newUuid(),
       id: this.nextBillTemplateId++,
       createdAt: now,
       updatedAt: now,
@@ -355,6 +379,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const subscription: Subscription = {
       ...input,
+      uuid: input.uuid ?? newUuid(),
       id: this.nextSubscriptionId++,
       createdAt: now,
       updatedAt: now,
@@ -406,7 +431,13 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
 
   async createIncome(input: NewIncome): Promise<Income> {
     const now = new Date().toISOString();
-    const income: Income = { ...input, id: this.nextIncomeId++, createdAt: now, updatedAt: now };
+    const income: Income = {
+      ...input,
+      uuid: input.uuid ?? newUuid(),
+      id: this.nextIncomeId++,
+      createdAt: now,
+      updatedAt: now,
+    };
     this.incomes.push(income);
     return income;
   }
@@ -425,7 +456,11 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
   }
 
   async deleteIncome(id: number): Promise<void> {
+    const removed = this.incomes.find((i) => i.id === id);
+    if (!removed) return;
+
     this.incomes = this.incomes.filter((i) => i.id !== id);
+    this.recordDeletion('INCOME', removed.uuid);
   }
 
   async getMonthlyIncomeTotal(month: YearMonth): Promise<number> {
@@ -507,6 +542,25 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
    * po terminie na zawsze — nawet gdyby użytkownik odtworzył kopię przed
    * upływem terminu. Kopiujemy więc to, co leży w danych.
    */
+  async listDeletedRecords(): Promise<DeletedRecord[]> {
+    return this.deletedRecords.map((record) => ({ ...record }));
+  }
+
+  /**
+   * Zapisuje, że rekord o tym identyfikatorze zniknął.
+   *
+   * `INSERT OR REPLACE` w wersji na SQLite pozwala nadpisać wcześniejszy wpis
+   * o tym samym rekordzie; tutaj robi to samo usunięcie duplikatu. Ten sam
+   * rekord da się skasować dwa razy tylko po odtworzeniu kopii, ale wtedy
+   * dwa wpisy o tej samej treści myliłyby przy liczeniu.
+   */
+  private recordDeletion(entityType: DeletedRecord['entityType'], uuid: string): void {
+    this.deletedRecords = this.deletedRecords.filter(
+      (record) => !(record.entityType === entityType && record.uuid === uuid)
+    );
+    this.deletedRecords.push({ entityType, uuid, deletedAt: new Date().toISOString() });
+  }
+
   async exportSnapshot(): Promise<BackupSnapshot> {
     return {
       categories: this.categories.map((c) => ({ ...c, usedBy: [...c.usedBy] })),
@@ -519,6 +573,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
         ...this.readGenerationKeys(this.generatedBills, 'BILL'),
         ...this.readGenerationKeys(this.generatedSubscriptionPayments, 'SUBSCRIPTION'),
       ],
+      deletedRecords: this.deletedRecords.map((record) => ({ ...record })),
     };
   }
 
@@ -529,6 +584,7 @@ export class InMemoryExpensesRepository implements ExpensesRepository {
     this.subscriptions = snapshot.subscriptions.map((s) => ({ ...s }));
     this.incomes = snapshot.incomes.map((i) => ({ ...i }));
     this.savedReports = snapshot.savedReports.map((r) => ({ ...r }));
+    this.deletedRecords = snapshot.deletedRecords.map((r) => ({ ...r }));
 
     this.generatedBills = new Set(
       snapshot.generatedRecords

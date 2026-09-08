@@ -507,6 +507,7 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
           generatedRecords: [],
           incomes: [],
           savedReports: [],
+          deletedRecords: [],
         });
 
         expect((await repo.getMonthlyTotals(THIS_MONTH)).purchasesGrosze).toBe(0);
@@ -694,6 +695,99 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
         await repo.importSnapshot({ ...snapshot, savedReports: [] });
 
         expect(await repo.listSavedReports()).toEqual([]);
+      });
+    });
+
+    /**
+     * Etap 14b: trwałe identyfikatory i ślad po skasowanych.
+     *
+     * Te testy stoją w kontrakcie, a nie przy jednej implementacji, bo obie
+     * realizują to samo ZUPEŁNIE INACZEJ: w wersji na SQLite pilnują tego
+     * wyzwalacze bazy, w wersji pamięciowej — kod klasy. Dokładnie tak powstają
+     * rozjazdy, których nie widać w testach jednostkowych: coś działa
+     * w testach na pamięci i zawodzi na telefonie.
+     */
+    describe('Trwałe identyfikatory i kasowanie (Etap 14b)', () => {
+      it('nowy wydatek dostaje identyfikator, o który nikt nie prosił', async () => {
+        const repo = await createRepository();
+
+        const payment = await addPurchase(repo, 12550);
+
+        expect(payment.uuid).toMatch(/^[0-9a-f]{32}$/);
+      });
+
+      it('dwa wydatki nigdy nie dzielą identyfikatora', async () => {
+        // Wspólny identyfikator byłby gorszy niż jego brak: przy synchronizacji
+        // drugi wydatek nadpisałby pierwszy, bo serwer uznałby je za ten sam.
+        const repo = await createRepository();
+
+        const first = await addPurchase(repo, 100);
+        const second = await addPurchase(repo, 200);
+
+        expect(first.uuid).not.toBe(second.uuid);
+      });
+
+      it('identyfikator nie zmienia się przy edycji', async () => {
+        // Zmiana identyfikatora przy edycji sprawiłaby, że drugi telefon
+        // zobaczyłby poprawiony wydatek jako NOWY, a stary zostałby obok.
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+
+        const updated = await repo.updatePayment(payment.id, { amountGrosze: 9900 });
+
+        expect(updated.uuid).toBe(payment.uuid);
+      });
+
+      it('świeża aplikacja nie ma nic do zgłoszenia jako skasowane', async () => {
+        const repo = await createRepository();
+
+        expect(await repo.listDeletedRecords()).toEqual([]);
+      });
+
+      it('skasowany wydatek zostawia po sobie identyfikator', async () => {
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+
+        await repo.deletePayment(payment.id);
+
+        expect(await repo.listDeletedRecords()).toEqual([
+          expect.objectContaining({ entityType: 'PAYMENT', uuid: payment.uuid }),
+        ]);
+      });
+
+      it('skasowanie nieistniejącego wydatku nie zostawia śladu', async () => {
+        // Nagrobek po rekordzie, którego nigdy nie było, kazałby serwerowi
+        // szukać czegoś nieistniejącego przy każdej synchronizacji.
+        const repo = await createRepository();
+
+        await repo.deletePayment(999999);
+
+        expect(await repo.listDeletedRecords()).toEqual([]);
+      });
+
+      it('kopia zapasowa niesie ślad po skasowanych', async () => {
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+        await repo.deletePayment(payment.id);
+
+        const snapshot = await repo.exportSnapshot();
+
+        expect(snapshot.deletedRecords).toEqual([
+          expect.objectContaining({ entityType: 'PAYMENT', uuid: payment.uuid }),
+        ]);
+      });
+
+      it('odtworzenie kopii zachowuje identyfikatory, a nie nadaje nowych', async () => {
+        // Nadanie nowych rozdwoiłoby każdy wydatek: po synchronizacji ten sam
+        // zakup istniałby dwa razy, pod starym i nowym identyfikatorem.
+        const repo = await createRepository();
+        const payment = await addPurchase(repo, 12550);
+        const snapshot = await repo.exportSnapshot();
+
+        await repo.importSnapshot(snapshot);
+
+        const restored = await repo.getPayment(payment.id);
+        expect(restored?.uuid).toBe(payment.uuid);
       });
     });
   });
