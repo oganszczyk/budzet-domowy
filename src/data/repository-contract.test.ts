@@ -841,6 +841,256 @@ function runContract(name: string, createRepository: () => Promise<ExpensesRepos
 
         expect((await repo.listPendingChanges()).incomes).toEqual([]);
       });
+
+      /**
+       * Etap 14d: zapisywanie zmian pobranych z serwera.
+       *
+       * Znowu kontrakt, bo znowu obie implementacje robią to inaczej: w wersji
+       * na SQLite trzeba GASIĆ znacznik „do wysłania" po każdym zapisie (podnosi
+       * go wyzwalacz), w pamięciowej wystarczy go nie podnosić. Wynik ma być
+       * identyczny — a rozjazd oznaczałby, że dwa telefony odbijają sobie te
+       * same rekordy w nieskończoność.
+       */
+      describe('Zmiany pobrane z serwera (Etap 14d)', () => {
+        const CZAS_STARY = '2026-01-01T10:00:00.000Z';
+        const CZAS_NOWY = '2026-09-08T10:00:00.000Z';
+
+        function pustaPaczka() {
+          return {
+            categories: [],
+            billTemplates: [],
+            subscriptions: [],
+            payments: [],
+            incomes: [],
+            deletedRecords: [],
+          };
+        }
+
+        /** Wydatek „z drugiego telefonu" w kategorii, którą ten telefon zna. */
+        async function obcyWydatek(repo: ExpensesRepository, overrides = {}) {
+          const [category] = await repo.listCategories(MainType.PURCHASE);
+
+          return {
+            uuid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01',
+            categoryUuid: category.uuid,
+            billTemplateUuid: null,
+            subscriptionUuid: null,
+            mainType: MainType.PURCHASE,
+            title: 'Zakupy z drugiego telefonu',
+            amountGrosze: 4500,
+            effectiveDate: dueDateFor(THIS_MONTH, 7),
+            dueDate: null,
+            paidDate: null,
+            status: null,
+            source: PaymentSource.MANUAL,
+            merchant: 'Lidl',
+            description: null,
+            paymentMethod: null,
+            receiptImagePath: null,
+            createdAt: CZAS_NOWY,
+            updatedAt: CZAS_NOWY,
+            syncedAt: CZAS_NOWY,
+            ...overrides,
+          };
+        }
+
+        it('nieznany wydatek z serwera pojawia się w historii', async () => {
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+
+          const wynik = await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          expect(wynik.applied).toBe(1);
+          expect((await repo.listHistory()).map((p) => p.uuid)).toContain(wydatek.uuid);
+        });
+
+        it('POBRANY WYDATEK NIE WRACA DO KOLEJKI WYSYŁKI', async () => {
+          // Najważniejszy test całego etapu. Gdyby zapis pobranego rekordu
+          // oznaczał go jako „do wysłania", telefon odesłałby go z powrotem
+          // przy najbliższej synchronizacji, drugi telefon zrobiłby to samo
+          // i oba odbijałyby sobie te same wydatki bez końca — bez żadnego
+          // widocznego objawu poza rosnącym rachunkiem za transfer.
+          const repo = await createRepository();
+          await udajUdanaWysylke(repo);
+
+          const wydatek = await obcyWydatek(repo);
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          const czekajace = await repo.listPendingChanges();
+          expect(czekajace.payments.map((p) => p.uuid)).not.toContain(wydatek.uuid);
+        });
+
+        it('poprawka pobrana z serwera też nie wraca do kolejki', async () => {
+          // Ten sam mechanizm, ale przy AKTUALIZACJI istniejącego rekordu —
+          // w wersji na SQLite to właśnie tutaj odpala się wyzwalacz.
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+          await udajUdanaWysylke(repo);
+
+          await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            payments: [{ ...wydatek, amountGrosze: 9900, updatedAt: '2026-09-09T10:00:00.000Z' }],
+          });
+
+          const czekajace = await repo.listPendingChanges();
+          expect(czekajace.payments.map((p) => p.uuid)).not.toContain(wydatek.uuid);
+        });
+
+        it('starsza wersja z serwera nie nadpisuje nowszej tutejszej', async () => {
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          const wynik = await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            payments: [{ ...wydatek, amountGrosze: 100, updatedAt: CZAS_STARY }],
+          });
+
+          expect(wynik.applied).toBe(0);
+          const zapisany = (await repo.listHistory()).find((p) => p.uuid === wydatek.uuid);
+          expect(zapisany?.amountGrosze).toBe(4500);
+        });
+
+        it('nowsza wersja z serwera wygrywa i jest zgłaszana', async () => {
+          // Decyzja właściciela projektu (08.09.2026): konflikt rozstrzyga
+          // nowszy zapis. Użytkownik musi się dowiedzieć, że jego poprawka
+          // przepadła — inaczej wygląda to na usterkę aplikacji.
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          const lokalny = (await repo.listHistory()).find((p) => p.uuid === wydatek.uuid);
+          await repo.updatePayment(lokalny!.id, { amountGrosze: 111 });
+
+          const wynik = await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            payments: [{ ...wydatek, amountGrosze: 777, updatedAt: '2026-12-31T23:59:59.000Z' }],
+          });
+
+          expect(wynik.overwritten).toBe(1);
+          const zapisany = (await repo.listHistory()).find((p) => p.uuid === wydatek.uuid);
+          expect(zapisany?.amountGrosze).toBe(777);
+        });
+
+        it('wydatek w nieznanej kategorii jest pomijany, a nie zgadywany', async () => {
+          // Kategoria jest w bazie wymagana. Wpisanie tu byle jakiej przypięłoby
+          // wydatek do przypadkowej kategorii i zafałszowało analizę — po cichu.
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo, {
+            categoryUuid: 'ffffffffffffffffffffffffffffff99',
+          });
+
+          const wynik = await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          expect(wynik.applied).toBe(0);
+          expect(wynik.skipped).toBe(1);
+        });
+
+        it('skasowanie z drugiego telefonu usuwa wydatek tutaj', async () => {
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            deletedRecords: [
+              {
+                entityType: 'PAYMENT',
+                uuid: wydatek.uuid,
+                deletedAt: CZAS_NOWY,
+                syncedAt: CZAS_NOWY,
+              },
+            ],
+          });
+
+          expect((await repo.listHistory()).map((p) => p.uuid)).not.toContain(wydatek.uuid);
+        });
+
+        it('skasowany wydatek NIE WRACA przy ponownym pobraniu', async () => {
+          // Wysyłka nie usuwa wierszy z serwera — dokłada nagrobek. Skasowany
+          // wydatek nadal tam leży i przy kolejnym pobraniu przyszedłby znowu.
+          // Nagrobek jest jedyną rzeczą, która mówi „nie, tego już nie ma".
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+
+          await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            deletedRecords: [
+              {
+                entityType: 'PAYMENT',
+                uuid: wydatek.uuid,
+                deletedAt: CZAS_NOWY,
+                syncedAt: CZAS_NOWY,
+              },
+            ],
+          });
+
+          await repo.applyRemoteChanges({ ...pustaPaczka(), payments: [wydatek] });
+
+          expect((await repo.listHistory()).map((p) => p.uuid)).not.toContain(wydatek.uuid);
+        });
+
+        it('nagrobek z serwera nie wraca do kolejki wysyłki', async () => {
+          const repo = await createRepository();
+          const wydatek = await obcyWydatek(repo);
+
+          await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            deletedRecords: [
+              {
+                entityType: 'PAYMENT',
+                uuid: wydatek.uuid,
+                deletedAt: CZAS_NOWY,
+                syncedAt: CZAS_NOWY,
+              },
+            ],
+          });
+
+          const czekajace = await repo.listPendingChanges();
+          expect(czekajace.deletedRecords.map((d) => d.uuid)).not.toContain(wydatek.uuid);
+        });
+
+        it('dochód z drugiego telefonu wchodzi do sumy miesiąca', async () => {
+          const repo = await createRepository();
+          const przed = await repo.getMonthlyIncomeTotal(THIS_MONTH);
+
+          await repo.applyRemoteChanges({
+            ...pustaPaczka(),
+            incomes: [
+              {
+                uuid: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb01',
+                personName: 'Marek',
+                amountGrosze: 500000,
+                month: `${THIS_MONTH.year}-${String(THIS_MONTH.month).padStart(2, '0')}`,
+                createdAt: CZAS_NOWY,
+                updatedAt: CZAS_NOWY,
+                syncedAt: CZAS_NOWY,
+              },
+            ],
+          });
+
+          expect(await repo.getMonthlyIncomeTotal(THIS_MONTH)).toBe(przed + 500000);
+        });
+
+        it('znacznik pobierania przeżywa zapis i odczyt', async () => {
+          const repo = await createRepository();
+
+          expect(await repo.getSyncMarker('pull:payments')).toBeNull();
+
+          await repo.setSyncMarker('pull:payments', CZAS_NOWY);
+
+          expect(await repo.getSyncMarker('pull:payments')).toBe(CZAS_NOWY);
+        });
+
+        it('brak znacznika znaczy „pobierz wszystko", a nie „nic nie pobieraj"', async () => {
+          // Stan po pierwszej instalacji. Gdyby brak znacznika czytało się jako
+          // „jestem na bieżąco", nowy telefon nigdy nie pobrałby historii.
+          const repo = await createRepository();
+
+          expect(await repo.getSyncMarker('pull:categories')).toBeNull();
+        });
+      });
     });
 
     /**

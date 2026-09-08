@@ -26,7 +26,7 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-nati
 
 import { strings } from '@/constants/strings';
 import { useAuth, type AuthOutcome } from '@/features/auth/auth-context';
-import { usePendingSyncCount, usePushToCloud } from '@/features/sync/mutations';
+import { usePendingSyncCount, useSynchronize } from '@/features/sync/mutations';
 import { plural } from '@/lib/plural';
 import { Button } from '@/ui/components/button';
 import { Card } from '@/ui/components/card';
@@ -60,7 +60,7 @@ export default function AccountScreen() {
         */}
         <View style={styles.warning}>
           <Ionicons name="alert-circle-outline" size={18} color={colors.statusWaiting} />
-          <Text style={styles.warningText}>{strings.account.notSyncingYet}</Text>
+          <Text style={styles.warningText}>{strings.account.cloudWarning}</Text>
         </View>
       </Screen>
     </>
@@ -260,32 +260,34 @@ function SignedInCard({ email, onSignOut }: SignedInCardProps) {
 }
 
 /**
- * Etap 14c: wysyłka do chmury.
+ * Etapy 14c i 14d: synchronizacja.
  *
  * DLACZEGO OBOK PRZYCISKU STOI LICZBA
  *
- * Sam „Wyślij" jest ślepy w obie strony: przed naciśnięciem nie wiadomo,
+ * Sam „Synchronizuj" jest ślepy w obie strony: przed naciśnięciem nie wiadomo,
  * czy jest co wysyłać, a po naciśnięciu — czy cokolwiek się stało. Licznik
  * odpowiada na oba pytania jedną liczbą, bez żadnego okna dialogowego.
  *
- * DLACZEGO NIEPOWODZENIE POKAZUJE, ILE ZDĄŻYŁO DOJECHAĆ
+ * DLACZEGO WYNIK MA CZTERY LINIE, A NIE JEDNĄ
  *
- * Wysyłka przerwana w połowie zostawia część rekordów na serwerze i ta praca
- * nie przepada. Komunikat „nie udało się" bez tej informacji kazałby myśleć,
- * że wszystko trzeba zaczynać od zera — a przy słabym łączu zniechęciłby
- * do kolejnych prób akurat wtedy, gdy są najbardziej potrzebne.
+ * „Gotowe" wystarczyłoby, gdyby synchronizacja mogła skończyć się tylko
+ * powodzeniem albo porażką. Ona ma stany pośrednie, które użytkownik MUSI
+ * zobaczyć: coś zostało nadpisane nowszą wersją z drugiego telefonu (jego
+ * poprawka przepadła), coś zostało pominięte (tego wydatku nie ma i nie
+ * będzie, dopóki nie spróbuje ponownie). Zwinięte w jedno słowo, obie te
+ * rzeczy wyglądałyby jak pełny sukces.
  */
 function SyncCard() {
   const pending = usePendingSyncCount();
-  const push = usePushToCloud();
+  const sync = useSynchronize();
 
   const czeka = pending.data ?? 0;
-  const wynik = push.data;
+  const wynik = sync.data;
 
   return (
     <Card style={styles.section}>
       <View style={styles.signedInHeader}>
-        <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+        <Ionicons name="sync-outline" size={20} color={colors.primary} />
         <Text style={styles.sectionTitle}>{strings.account.sync.title}</Text>
       </View>
 
@@ -296,11 +298,10 @@ function SyncCard() {
       </Text>
 
       <Button
-        label={push.isPending ? strings.account.sync.working : strings.account.sync.button}
-        icon="cloud-upload-outline"
-        onPress={() => push.mutate()}
-        loading={push.isPending}
-        disabled={czeka === 0 && wynik === undefined}
+        label={sync.isPending ? strings.account.sync.working : strings.account.sync.button}
+        icon="sync-outline"
+        onPress={() => sync.mutate()}
+        loading={sync.isPending}
       />
 
       <SyncResult outcome={wynik} />
@@ -308,22 +309,47 @@ function SyncCard() {
   );
 }
 
-function SyncResult({ outcome }: { outcome: ReturnType<typeof usePushToCloud>['data'] }) {
+/** Zdania opisujące wynik — tyle, ile naprawdę się wydarzyło. */
+function podsumowanie(outcome: NonNullable<ReturnType<typeof useSynchronize>['data']>): string[] {
+  const { sent, applied, overwritten, skipped } = outcome;
+  const forma = (ile: number) => plural(ile, strings.account.sync.records);
+  const linie: string[] = [];
+
+  if (sent > 0) linie.push(strings.account.sync.sent(sent, forma(sent)));
+  if (applied > 0) linie.push(strings.account.sync.received(applied, forma(applied)));
+  if (overwritten > 0) {
+    linie.push(strings.account.sync.overwritten(overwritten, forma(overwritten)));
+  }
+  if (skipped > 0) linie.push(strings.account.sync.skipped(skipped, forma(skipped)));
+
+  if (linie.length === 0) linie.push(strings.account.sync.nothingToDo);
+
+  return linie;
+}
+
+function SyncResult({ outcome }: { outcome: ReturnType<typeof useSynchronize>['data'] }) {
   if (!outcome) return null;
 
-  if (outcome.ok) {
-    const tresc =
-      outcome.sent === 0
-        ? strings.account.sync.nothingToSend
-        : strings.account.sync.sent(
-            outcome.sent,
-            plural(outcome.sent, strings.account.sync.records)
-          );
+  const linie = podsumowanie(outcome);
 
+  if (outcome.ok) {
     return (
       <View style={[styles.feedback, styles.feedbackSuccess]}>
         <Ionicons name="checkmark-circle-outline" size={18} color={colors.statusPaid} />
-        <Text style={[styles.feedbackText, styles.feedbackSuccessText]}>{tresc}</Text>
+        <View style={styles.feedbackTexts}>
+          {linie.map((linia, index) => (
+            <Text
+              key={linia}
+              style={
+                index === 0
+                  ? [styles.feedbackText, styles.feedbackSuccessText]
+                  : styles.feedbackDetail
+              }
+            >
+              {linia}
+            </Text>
+          ))}
+        </View>
       </View>
     );
   }
@@ -333,16 +359,22 @@ function SyncResult({ outcome }: { outcome: ReturnType<typeof usePushToCloud>['d
       <Ionicons name="close-circle-outline" size={18} color={colors.statusOverdue} />
       <View style={styles.feedbackTexts}>
         <Text style={[styles.feedbackText, styles.feedbackErrorText]}>
-          {strings.account.sync.error[outcome.reason]}
+          {outcome.reason
+            ? strings.account.sync.error[outcome.reason]
+            : strings.account.sync.error.UNKNOWN}
         </Text>
-        {outcome.sent > 0 && (
-          <Text style={styles.feedbackDetail}>
-            {strings.account.sync.partial(
-              outcome.sent,
-              plural(outcome.sent, strings.account.sync.records)
-            )}
-          </Text>
-        )}
+        {/*
+          Po niepowodzeniu pokazujemy, ile zdążyło przejść w obie strony.
+          Bez tego „nie udało się" kazałoby sądzić, że wszystko trzeba
+          zaczynać od zera — a przy słabym łączu zniechęcałoby do kolejnych
+          prób akurat wtedy, gdy są najbardziej potrzebne.
+        */}
+        {(outcome.sent > 0 || outcome.applied > 0) &&
+          linie.map((linia) => (
+            <Text key={linia} style={styles.feedbackDetail}>
+              {linia}
+            </Text>
+          ))}
       </View>
     </View>
   );

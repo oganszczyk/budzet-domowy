@@ -34,6 +34,57 @@ export const SHARED_CATEGORY_NAMES = [
   'Inne',
 ] as const;
 
+/**
+ * STAŁE IDENTYFIKATORY DANYCH STARTOWYCH (Etap 14d).
+ *
+ * DLACZEGO NIE LOSOWE, SKORO WSZYSTKIE POZOSTAŁE SĄ LOSOWE
+ *
+ * Każdy telefon zakłada sobie te same domyślne kategorie przy pierwszym
+ * uruchomieniu. Gdyby przy tym losował identyfikatory, „Jedzenie" z telefonu
+ * A i „Jedzenie" z telefonu B byłyby dla synchronizacji DWOMA RÓŻNYMI
+ * kategoriami — a po pierwszym pobraniu danych użytkownik zobaczyłby każdą
+ * domyślną kategorię podwójnie, bez żadnego sposobu, żeby je scalić.
+ *
+ * To nie jest wyjątek od zasady „identyfikator jest losowy", tylko jej
+ * uzupełnienie: losowanie służy temu, żeby rekordy utworzone NIEZALEŻNIE
+ * nigdy się nie zderzyły. Kategorie startowe nie powstają niezależnie —
+ * powstają z tej samej listy, w tej samej aplikacji, i mają być tym samym.
+ *
+ * Zapis `c` dla kategorii i `b` dla szablonów rachunków, z wiodącymi zerami
+ * do 32 znaków. Wygląda inaczej niż identyfikator losowy i o to chodzi:
+ * widać na pierwszy rzut oka, że to rekord wbudowany, a nie wpisany.
+ *
+ * TYCH WARTOŚCI NIE WOLNO ZMIENIAĆ. Zmiana rozdwoi kategorię u każdego,
+ * kto ma już aplikację: stara zostanie w chmurze, nowa pojedzie obok.
+ */
+const wbudowany = (koncowka: string): string => koncowka.padStart(32, '0');
+
+export const BILL_CATEGORY_UUID = wbudowany('c00');
+
+/** Identyfikator podkategorii po nazwie. Nazwa jest tu kluczem trwałym. */
+export const SHARED_CATEGORY_UUIDS: Record<string, string> = {
+  Jedzenie: wbudowany('c01'),
+  'Kosmetyki i higiena': wbudowany('c02'),
+  Sprzątanie: wbudowany('c03'),
+  Ubrania: wbudowany('c04'),
+  Mieszkanie: wbudowany('c05'),
+  Rozrywka: wbudowany('c06'),
+  Sport: wbudowany('c07'),
+  Komputerowe: wbudowany('c08'),
+  Inne: wbudowany('c09'),
+};
+
+/** Identyfikator domyślnego szablonu rachunku po nazwie. */
+export const DEFAULT_BILL_TEMPLATE_UUIDS: Record<string, string> = {
+  'Czynsz za mieszkanie': wbudowany('b01'),
+  Prąd: wbudowany('b02'),
+  Woda: wbudowany('b03'),
+  Gaz: wbudowany('b04'),
+  Internet: wbudowany('b05'),
+  Telefon: wbudowany('b06'),
+  Ubezpieczenie: wbudowany('b07'),
+};
+
 export const CATEGORY_ICONS: Record<string, string> = {
   [BILL_CATEGORY_NAME]: 'receipt-outline',
   Jedzenie: 'restaurant-outline',

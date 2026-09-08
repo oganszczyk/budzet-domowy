@@ -12,6 +12,48 @@ import { SqliteExpensesRepository } from './sqlite-repository';
 
 const THIS_MONTH = currentYearMonth();
 
+/**
+ * Zasiew W KSZTAŁCIE Z EPOKI WERSJI 1 SCHEMATU.
+ *
+ * `seedDefaults` jest pisany pod aktualny schemat i wstawia kolumny, których
+ * wersja 1 nie ma — od Etapu 14d także `uuid`. Testy migracji odgrywają
+ * telefon, na którym dane zapisała STARA aplikacja, więc muszą użyć starego
+ * zapytania. To ten sam powód, dla którego wydatek wstawiają tu ręcznie,
+ * a nie przez dzisiejsze repozytorium.
+ *
+ * Kilka kategorii wystarczy — testy sprawdzają migrację, nie kompletność
+ * listy startowej.
+ */
+async function seedAtVersionOne(db: ReturnType<typeof openNodeDatabase>) {
+  const nazwy: [string, string][] = [
+    ['Rachunki domowe', 'BILL'],
+    ['Jedzenie', 'SUBSCRIPTION,PURCHASE'],
+    ['Rozrywka', 'SUBSCRIPTION,PURCHASE'],
+    ['Inne', 'SUBSCRIPTION,PURCHASE'],
+  ];
+
+  for (const [index, [name, usedBy]] of nazwy.entries()) {
+    await db.run(
+      'INSERT INTO category (name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, 1, ?, ?)',
+      [name, 'pricetag-outline', index, usedBy]
+    );
+  }
+
+  const now = new Date().toISOString();
+  const billCategory = await db.first<{ id: number }>(
+    "SELECT id FROM category WHERE name = 'Rachunki domowe'"
+  );
+
+  for (const [index, name] of ['Prąd', 'Woda', 'Gaz'].entries()) {
+    await db.run(
+      `INSERT INTO bill_template
+         (name, categoryId, defaultDueDay, isActive, useFixedAmount, fixedAmountGrosze, createdAt, updatedAt)
+       VALUES (?, ?, ?, 1, 0, NULL, ?, ?)`,
+      [name, billCategory?.id ?? 1, 10 + index, now, now]
+    );
+  }
+}
+
 /** Ścieżka do jednorazowego pliku bazy — potrzebna do sprawdzenia trwałości. */
 function tempDatabasePath(): string {
   return path.join(os.tmpdir(), `domowe-wydatki-test-${Date.now()}-${Math.random()}.db`);
@@ -78,7 +120,7 @@ describe('migracje (1.2)', () => {
     // --- stan sprzed Etapu 11: tylko pierwsza migracja ---
     await db.exec(MIGRATIONS[0]);
     await db.exec('PRAGMA user_version = 1');
-    await seedDefaults(db);
+    await seedAtVersionOne(db);
 
     const oldRepo = new SqliteExpensesRepository(db);
     const [category] = await oldRepo.listCategories(MainType.PURCHASE);
@@ -159,7 +201,7 @@ describe('wersja 3 schematu: zestawienia i trwałe identyfikatory', () => {
     const db = openNodeDatabase();
     await db.exec(MIGRATIONS[0]);
     await db.exec('PRAGMA user_version = 1');
-    await seedDefaults(db);
+    await seedAtVersionOne(db);
 
     const repo = new SqliteExpensesRepository(db);
     const [category] = await repo.listCategories(MainType.PURCHASE);
@@ -575,7 +617,7 @@ describe('wersja 4 schematu: ślad po skasowanych i znacznik do wysłania', () =
     const db = openNodeDatabase();
     await db.exec(MIGRATIONS[0]);
     await db.exec('PRAGMA user_version = 1');
-    await seedDefaults(db);
+    await seedAtVersionOne(db);
 
     await migrate(db);
 
@@ -647,5 +689,107 @@ describe('wersja 4 schematu: ślad po skasowanych i znacznik do wysłania', () =
     expect(await repo.listDeletedRecords()).toEqual([
       expect.objectContaining({ entityType: 'PAYMENT', uuid: payment.uuid }),
     ]);
+  });
+});
+
+/**
+ * Etap 14d, wersja 6 schematu.
+ *
+ * Dane startowe muszą mieć TE SAME identyfikatory na każdym telefonie.
+ * Gdyby każdy je losował, „Jedzenie" z jednego urządzenia i „Jedzenie"
+ * z drugiego byłyby dla synchronizacji dwiema różnymi kategoriami —
+ * a użytkownik zobaczyłby każdą domyślną pozycję podwójnie, bez żadnego
+ * sposobu, żeby je scalić. To jest usterka, której nie da się naprawić
+ * po fakcie, więc pilnuje jej test.
+ */
+describe('wersja 6 schematu: stałe identyfikatory danych startowych', () => {
+  it('domyślne kategorie mają identyfikatory wbudowane, nie losowe', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+    await seedDefaults(db);
+
+    const row = await db.first<{ uuid: string }>(
+      "SELECT uuid FROM category WHERE name = 'Jedzenie'"
+    );
+
+    expect(row?.uuid).toBe('00000000000000000000000000000c01');
+  });
+
+  it('domyślne szablony rachunków też', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+    await seedDefaults(db);
+
+    const row = await db.first<{ uuid: string }>(
+      "SELECT uuid FROM bill_template WHERE name = 'Gaz'"
+    );
+
+    expect(row?.uuid).toBe('00000000000000000000000000000b04');
+  });
+
+  it('dwa telefony nadają tej samej kategorii ten sam identyfikator', async () => {
+    // Sedno sprawy. Dwie niezależne bazy, ta sama nazwa, ten sam wynik.
+    const pierwszy = openNodeDatabase();
+    await migrate(pierwszy);
+    await seedDefaults(pierwszy);
+
+    const drugi = openNodeDatabase();
+    await migrate(drugi);
+    await seedDefaults(drugi);
+
+    const zPierwszego = await pierwszy.all<{ name: string; uuid: string }>(
+      'SELECT name, uuid FROM category ORDER BY sortOrder'
+    );
+    const zDrugiego = await drugi.all<{ name: string; uuid: string }>(
+      'SELECT name, uuid FROM category ORDER BY sortOrder'
+    );
+
+    expect(zPierwszego).toEqual(zDrugiego);
+  });
+
+  it('poprawia identyfikatory nadane losowo przed tą wersją', async () => {
+    // Telefon, który ma aplikację od wcześniejszego etapu, wylosował sobie
+    // własne identyfikatory. Migracja musi je sprowadzić do wspólnych,
+    // inaczej po pierwszej synchronizacji zobaczy wszystko podwójnie.
+    const db = openNodeDatabase();
+
+    // Baza w wersji 3 — jest już kolumna `uuid`, wypełniana losowo.
+    for (const migracja of MIGRATIONS.slice(0, 3)) await db.exec(migracja);
+    await db.exec('PRAGMA user_version = 3');
+
+    await db.run(
+      "INSERT INTO category (name, iconKey, isActive, sortOrder, usedBy) VALUES ('Jedzenie', 'x', 1, 1, 'PURCHASE')"
+    );
+    const przed = await db.first<{ uuid: string }>(
+      "SELECT uuid FROM category WHERE name = 'Jedzenie'"
+    );
+    expect(przed?.uuid).not.toBe('00000000000000000000000000000c01');
+
+    await migrate(db);
+
+    const po = await db.first<{ uuid: string }>(
+      "SELECT uuid FROM category WHERE name = 'Jedzenie'"
+    );
+    expect(po?.uuid).toBe('00000000000000000000000000000c01');
+  });
+
+  it('poprawione rekordy trafiają do kolejki wysyłki', async () => {
+    // Identyfikator się zmienił, więc serwer zna je pod starym. Muszą pojechać
+    // ponownie — inaczej wydatki wskazywałyby na kategorię, której w chmurze
+    // nie ma pod tym numerem.
+    const db = openNodeDatabase();
+    for (const migracja of MIGRATIONS.slice(0, 4)) await db.exec(migracja);
+    await db.exec('PRAGMA user_version = 4');
+
+    await db.run(
+      "INSERT INTO category (name, iconKey, isActive, sortOrder, usedBy, pendingSync) VALUES ('Jedzenie', 'x', 1, 1, 'PURCHASE', 0)"
+    );
+
+    await migrate(db);
+
+    const row = await db.first<{ pendingSync: number }>(
+      "SELECT pendingSync FROM category WHERE name = 'Jedzenie'"
+    );
+    expect(row?.pendingSync).toBe(1);
   });
 });
