@@ -27,6 +27,12 @@ import type { BillStatus, FrequencyType, MainType, PaymentMethod, PaymentSource 
  */
 export type Category = {
   id: number;
+  /**
+   * Trwały identyfikator rekordu — ten sam na obu telefonach (Etap 14b).
+   * Bez niego kategoria „Jedzenie" z drugiego telefonu byłaby obcym rekordem.
+   * Nadaje go baza przy zapisie; nie podaje się go przy tworzeniu.
+   */
+  uuid: string;
   /** Które kategorie główne mogą korzystać z tej podkategorii. */
   usedBy: MainType[];
   /** Nazwa widoczna w aplikacji, po polsku. */
@@ -41,6 +47,12 @@ export type Category = {
 /** 7.2: Encja Payment — jeden zapis finansowy. */
 export type Payment = {
   id: number;
+  /**
+   * Trwały identyfikator rekordu — ten sam na obu telefonach (Etap 14b).
+   * Lokalne `id` to numer kolejny tej bazy — na drugim telefonie oznacza co innego.
+   * Nadaje go baza przy zapisie; nie podaje się go przy tworzeniu.
+   */
+  uuid: string;
   mainType: MainType;
   /** Podkategoria lub kategoria źródłowa. */
   categoryId: number;
@@ -78,6 +90,12 @@ export type Payment = {
 /** 7.3: Encja BillTemplate — szablon rachunku cyklicznego. */
 export type BillTemplate = {
   id: number;
+  /**
+   * Trwały identyfikator rekordu — ten sam na obu telefonach (Etap 14b).
+   * Szablon musi być rozpoznawalny między urządzeniami, bo generuje rachunki.
+   * Nadaje go baza przy zapisie; nie podaje się go przy tworzeniu.
+   */
+  uuid: string;
   name: string;
   categoryId: number;
   /** Domyślny dzień terminu w miesiącu (1-31). */
@@ -94,6 +112,12 @@ export type BillTemplate = {
 /** 7.4: Encja Subscription. */
 export type Subscription = {
   id: number;
+  /**
+   * Trwały identyfikator rekordu — ten sam na obu telefonach (Etap 14b).
+   * Subskrypcja żyje latami i musi przetrwać zmianę telefonu.
+   * Nadaje go baza przy zapisie; nie podaje się go przy tworzeniu.
+   */
+  uuid: string;
   name: string;
   /** Aktualna kwota przyszłych płatności. */
   amountGrosze: number;
@@ -136,6 +160,12 @@ export type MonthlyTotals = {
  */
 export type Income = {
   id: number;
+  /**
+   * Trwały identyfikator rekordu — ten sam na obu telefonach (Etap 14b).
+   * Dochód wpisany na jednym telefonie ma pozostać jednym rekordem, nie dwoma.
+   * Nadaje go baza przy zapisie; nie podaje się go przy tworzeniu.
+   */
+  uuid: string;
   /** Kto zarobił — dowolny tekst, np. „Ola", „Marek", „Wynajem". */
   personName: string;
   /** Kwota w groszach (BR-03). Zawsze dodatnia. */

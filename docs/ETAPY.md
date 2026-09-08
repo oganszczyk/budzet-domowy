@@ -730,6 +730,12 @@ kilkudziesięciu.
 Model i format kopii rozszerzymy dopiero wtedy, gdy powstanie prawdziwa
 synchronizacja — do tego czasu kolumna czeka wypełniona.
 
+> **Dopisane po Etapie 14b (08.09.2026):** ten moment nastąpił. `uuid` należy
+> dziś do typów, a kopia zapasowa go niesie. Przewidywana cena okazała się
+> trafna co do rodzaju: poprawki dotknęły dziewięciu plików z testami.
+> Wyzwalacz z tej migracji zostaje jako zabezpieczenie zapisów, które
+> o kolumnie zapomną.
+
 ### Trzy formy liczby mnogiej
 
 „Ostatnie 3 miesięcy" albo „ostatnie 22 miesiące" to nie jest drobiazg
@@ -775,12 +781,12 @@ Wariant „Supabase zamiast SQLite" odrzucony z tego jednego powodu.
 Podział na cztery etapy, bo każdy z nich osobno kończy się działającą
 aplikacją (zasada 4 z `AGENTS.md`):
 
-| Etap | Zakres                                                        | Widoczne dla użytkownika            |
-| ---- | ------------------------------------------------------------- | ----------------------------------- |
-| 14a  | Klient Supabase, logowanie, ekran konta                       | Nowy ekran „Konto"                  |
-| 14b  | `uuid` w modelach, klucze obce po `uuid`, ślad po skasowanych | Nic — przebudowa fundamentu         |
-| 14c  | Tabele na serwerze + RLS, wysyłka zmian                       | Przycisk „Synchronizuj"             |
-| 14d  | Pobieranie, scalanie, rozstrzyganie konfliktów                | Drugi telefon widzi dane pierwszego |
+| Etap | Zakres                                                       | Widoczne dla użytkownika            |
+| ---- | ------------------------------------------------------------ | ----------------------------------- |
+| 14a  | Klient Supabase, logowanie, ekran konta                      | Nowy ekran „Konto"                  |
+| 14b  | `uuid` w modelach, ślad po skasowanych, znacznik do wysłania | Nic — przebudowa fundamentu         |
+| 14c  | Tabele na serwerze + RLS, wysyłka zmian                      | Przycisk „Synchronizuj"             |
+| 14d  | Pobieranie, scalanie, rozstrzyganie konfliktów               | Drugi telefon widzi dane pierwszego |
 
 ### Etap 14a — konto i logowanie ✅ ZAKOŃCZONY
 
@@ -853,15 +859,119 @@ i wylogowanie. Weryfikacja w przeglądarce nie obejmuje SecureStore — w wersji
 webowej sesja idzie do `localStorage`, więc dzielenie na kawałki i Keystore
 sprawdzą się dopiero na Androidzie.
 
-### Etap 14b — trwałe identyfikatory 🔜
+### Etap 14b — trwałe identyfikatory ✅ ZAKOŃCZONY
 
-- [ ] `uuid` wchodzi do typów `Payment`, `Category`, `BillTemplate`,
+- [x] `uuid` wchodzi do typów `Payment`, `Category`, `BillTemplate`,
       `Subscription`, `Income` — spłata długu świadomie zaciągniętego w Etapie 13
-- [ ] Klucze obce między rekordami po `uuid`, nie po lokalnym `id`
-- [ ] Tabela skasowanych rekordów — bez niej usunięty wydatek wróciłby
-      przy pierwszej synchronizacji i nie dałoby się go usunąć na stałe
-- [ ] Znacznik „do wysłania" przy każdym zapisie
-- [ ] Migracja 3 → 4, rozszerzenie formatu kopii zapasowej
+- [x] Generator identyfikatorów — `src/lib/uuid.ts`
+- [x] Tabela skasowanych rekordów `deleted_record` z wyzwalaczami
+- [x] Znacznik `pendingSync` przy każdym zapisie, podnoszony wyzwalaczem
+- [x] Migracja 3 → 4
+- [x] Format kopii zapasowej w wersji 4 — z identyfikatorami i śladem
+      po skasowanych; kopie w wersjach 1–3 nadal się wczytują
+- [x] 39 nowych testów (razem 427, wszystkie przechodzą)
+- [ ] ~~Klucze obce między rekordami po `uuid`, nie po lokalnym `id`~~ —
+      **odstąpiono, uzasadnienie niżej**
+
+**Etap 14b NIC NIE ZMIENIA NA EKRANIE.** To przebudowa fundamentu: aplikacja
+wygląda i działa dokładnie tak samo, a różnicę widać dopiero w Etapie 14c.
+
+#### Odstąpienie od kluczy obcych po `uuid`
+
+Plan zakładał przepisanie `categoryId`, `billTemplateId` i `subscriptionId`
+na odpowiedniki po `uuid`. Przy pisaniu okazało się to złym pomysłem.
+
+Zmiana dotknęłaby repozytorium (ponad tysiąc linii), wszystkich ekranów
+i kilkudziesięciu testów — a lokalnej bazie nie dałaby nic. Wewnątrz jednego
+telefonu `INTEGER` jest poprawny i szybszy od porównywania 32 znaków tekstu,
+a wskazuje na niego kilkanaście kolumn i indeksów.
+
+Serwerowi potrzebne są identyfikatory trwałe i będzie je dostawał — tyle że
+z jednego złączenia przy wysyłce:
+
+```sql
+SELECT p.*, c.uuid AS categoryUuid FROM payment p JOIN category c ON c.id = p.categoryId
+```
+
+Tłumaczenie `id` ↔ `uuid` mieszka więc w warstwie synchronizacji (Etap 14c),
+zamiast rozlewać się po całej aplikacji. Cena: przy pobieraniu trzeba wczytywać
+kategorie przed wydatkami, żeby było na co przetłumaczyć obcy `uuid`. To jedno
+zdanie w kodzie synchronizacji wobec przebudowy połowy projektu.
+
+#### Dlaczego `uuid` jest nieobowiązkowy przy tworzeniu
+
+W gotowym rekordzie identyfikator jest wymagany. Przy TWORZENIU podaje się go
+tylko wtedy, gdy rekord ma zachować cudzy: przy odtwarzaniu kopii zapasowej
+i przy pobraniu z serwera. W pozostałych kilkunastu miejscach — formularzach,
+automacie rachunków, danych demonstracyjnych, zasiewie i testach — nadaje go
+baza albo repozytorium.
+
+Gdyby był wymagany, każde z tych miejsc musiałoby zawołać generator, a pominięcie
+jednego przeszłoby przez kompilator dopiero po dopisaniu tam pola z byle jaką
+wartością. Nieobowiązkowe pole odwraca ten układ: kto milczy, dostaje poprawny
+identyfikator.
+
+#### Ślad po skasowanych, czyli dlaczego kasowanie musi zostawiać zapis
+
+Bez tabeli `deleted_record` usunięcie wydatku byłoby nieodwracalne tylko
+z pozoru. Telefon A kasuje wydatek i po prostu przestaje go mieć. Telefon B,
+który nic nie kasował, nadal go ma i wysyła. Telefon A widzi rekord, którego
+u siebie nie zna, uznaje go za nowy i zapisuje z powrotem. Skasowany wydatek
+WRACA — za każdym razem, na obu telefonach, bez żadnego komunikatu.
+
+Nagrobek zapisuje `uuid`, a nie `id`: lokalny numer nic nie znaczy poza tym
+jednym telefonem, a wiersza, do którego należał, już nie ma.
+
+#### Warunek wyzwalacza, który wygląda dziwnie i taki ma być
+
+`AFTER UPDATE ... WHEN old.pendingSync = 0 AND new.pendingSync = 0`.
+Cztery przypadki, wszystkie potrzebne:
+
+| Zmiana                          | Warunek      | Co się dzieje                              |
+| ------------------------------- | ------------ | ------------------------------------------ |
+| edycja czystego rekordu (0 → 0) | spełniony    | znacznik idzie na 1 — o to chodzi          |
+| edycja oznaczonego (1 → 1)      | niespełniony | nie trzeba, już jest 1                     |
+| zgaszenie po wysyłce (1 → 0)    | niespełniony | inaczej wysyłka nigdy by się nie skończyła |
+| zapis samego wyzwalacza (0 → 1) | niespełniony | inaczej wywoływałby sam siebie bez końca   |
+
+Ostatni wiersz jest powodem, dla którego warunek nie brzmi po prostu
+`old.pendingSync = 0`. Testy sprawdzają wszystkie cztery.
+
+#### Wyzwalacze zamiast zmian w zapytaniach
+
+Ta sama decyzja, co przy `uuid` w Etapie 13. Kasowanie i edycja dzieją się
+w kilkunastu miejscach repozytorium i przybędzie ich wraz z synchronizacją.
+Zapomniany jeden `DELETE` nie psuje niczego widocznego — objawia się dopiero
+wracającym wydatkiem, wiele dni później, na drugim urządzeniu. Baza pilnuje
+tego sama, więc nie da się tego pominąć.
+
+Cena: TypeScript nie sprawdzi ani jednego wyzwalacza. Dlatego pilnuje ich
+dziesięć testów w `migrations.test.ts`, a osiem testów kontraktu wymusza,
+żeby wersja pamięciowa — gdzie to samo robi kod klasy — zachowywała się
+identycznie.
+
+#### Kopie zapasowe sprzed Etapu 14b nadal działają
+
+Format pliku ma wersję 4. Brak pola `uuid` znaczy „kopia ze starszej wersji" —
+czytnik nadaje wtedy nowe identyfikatory, bo dla serwera te rekordy i tak są
+nowe. Pole OBECNE, ale uszkodzone, to co innego: odmowa wczytania. Dolosowanie
+identyfikatora w tym miejscu byłoby najgorsze z możliwych — dwa telefony
+odtworzyłyby tę samą kopię pod różnymi identyfikatorami i po synchronizacji
+każdy wydatek istniałby dwa razy.
+
+#### Sprawdzone
+
+| Sprawdzenie                      | Wynik                                         |
+| -------------------------------- | --------------------------------------------- |
+| `npm run typecheck`              | czysty                                        |
+| `npm run lint`                   | czysty                                        |
+| `npm test`                       | 427 testów, 22 zestawy — wszystkie przechodzą |
+| `npx expo export --platform web` | build przechodzi                              |
+
+**Do sprawdzenia na fizycznym telefonie:** aktualizacja aplikacji na bazie
+z prawdziwymi danymi — po migracji 3 → 4 wszystkie wydatki mają być na miejscu.
+Test `aktualizacja ze starej wersji schematu zachowuje dane użytkownika`
+odgrywa to w Node, ale na prawdziwym pliku bazy nikt tego jeszcze nie widział.
 
 ### Etap 14c — schemat na serwerze i wysyłka 🔜
 

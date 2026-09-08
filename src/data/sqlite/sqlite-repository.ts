@@ -8,7 +8,7 @@
  */
 
 import type { SavedReport } from '@/domain/analysis';
-import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
+import type { BackupSnapshot, DeletedRecord, GeneratedRecord } from '@/domain/backup';
 import { computeBillStatus } from '@/domain/bill-status';
 import { MainType } from '@/domain/enums';
 import type {
@@ -27,6 +27,7 @@ import {
   yearMonthOf,
   type YearMonth,
 } from '@/lib/date';
+import { newUuid } from '@/lib/uuid';
 
 import type {
   BillAmountHistoryEntry,
@@ -49,6 +50,7 @@ import type { SqlDatabase, SqlParam } from './database';
 /** Wiersze przychodzą z SQLite jako zwykłe obiekty — te typy je opisują. */
 type CategoryRow = {
   id: number;
+  uuid: string;
   name: string;
   iconKey: string;
   isActive: number;
@@ -58,6 +60,7 @@ type CategoryRow = {
 
 type PaymentRow = {
   id: number;
+  uuid: string;
   mainType: string;
   categoryId: number;
   title: string;
@@ -79,6 +82,7 @@ type PaymentRow = {
 
 type BillTemplateRow = {
   id: number;
+  uuid: string;
   name: string;
   categoryId: number;
   defaultDueDay: number;
@@ -91,6 +95,7 @@ type BillTemplateRow = {
 
 type SubscriptionRow = {
   id: number;
+  uuid: string;
   name: string;
   amountGrosze: number;
   frequencyType: string;
@@ -107,6 +112,7 @@ type SubscriptionRow = {
 
 type IncomeRow = {
   id: number;
+  uuid: string;
   personName: string;
   amountGrosze: number;
   month: string;
@@ -130,12 +136,12 @@ const toDbBool = (value: boolean): number => (value ? 1 : 0);
 const fromDbBool = (value: number): boolean => value === 1;
 
 const PAYMENT_COLUMNS = `
-  id, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+  id, uuid, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
   status, source, merchant, description, paymentMethod, billTemplateId,
   subscriptionId, receiptImagePath, createdAt, updatedAt
 `;
 
-const INCOME_COLUMNS = 'id, personName, amountGrosze, month, createdAt, updatedAt';
+const INCOME_COLUMNS = 'id, uuid, personName, amountGrosze, month, createdAt, updatedAt';
 
 const SAVED_REPORT_COLUMNS =
   'id, name, subjectKey, rangeMode, windowMonths, sortOrder, createdAt, updatedAt';
@@ -148,6 +154,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   private toCategory(row: CategoryRow): Category {
     return {
       id: row.id,
+      uuid: row.uuid,
       name: row.name,
       iconKey: row.iconKey,
       isActive: fromDbBool(row.isActive),
@@ -163,6 +170,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   private toPayment(row: PaymentRow): Payment {
     const payment = {
       id: row.id,
+      uuid: row.uuid,
       mainType: row.mainType as Payment['mainType'],
       categoryId: row.categoryId,
       title: row.title,
@@ -189,6 +197,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   private toBillTemplate(row: BillTemplateRow): BillTemplate {
     return {
       id: row.id,
+      uuid: row.uuid,
       name: row.name,
       categoryId: row.categoryId,
       defaultDueDay: row.defaultDueDay,
@@ -203,6 +212,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   private toSubscription(row: SubscriptionRow): Subscription {
     return {
       id: row.id,
+      uuid: row.uuid,
       name: row.name,
       amountGrosze: row.amountGrosze,
       frequencyType: row.frequencyType as Subscription['frequencyType'],
@@ -240,12 +250,19 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     );
     const sortOrder = input.sortOrder ?? next?.nextOrder ?? 1;
 
+    // Trwały identyfikator nadajemy TUTAJ, a nie zostawiamy wyzwalaczowi
+    // z migracji 3. Wyzwalacz zna go dopiero po zapisie, a ta metoda zwraca
+    // gotowy rekord bez ponownego odczytu — musiałaby dopytać bazę o coś,
+    // co i tak potrafi wymyślić sama. Wyzwalacz zostaje jako zabezpieczenie
+    // dla zapisów, które o kolumnie zapomną.
+    const uuid = input.uuid ?? newUuid();
+
     const result = await this.db.run(
-      'INSERT INTO category (name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, ?, ?, ?)',
-      [input.name, input.iconKey, toDbBool(input.isActive), sortOrder, input.usedBy.join(',')]
+      'INSERT INTO category (uuid, name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuid, input.name, input.iconKey, toDbBool(input.isActive), sortOrder, input.usedBy.join(',')]
     );
 
-    return { ...input, id: result.lastInsertRowId, sortOrder };
+    return { ...input, uuid, id: result.lastInsertRowId, sortOrder };
   }
 
   // --- Sumy (6.1, BR-09) ---
@@ -367,11 +384,12 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const result = await this.db.run(
       `INSERT INTO payment (
-         mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+         uuid, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
          status, source, merchant, description, paymentMethod, billTemplateId,
          subscriptionId, receiptImagePath, createdAt, updatedAt
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        input.uuid ?? newUuid(),
         input.mainType,
         input.categoryId,
         input.title,
@@ -455,9 +473,10 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const result = await this.db.run(
       `INSERT INTO bill_template
-         (name, categoryId, defaultDueDay, isActive, useFixedAmount, fixedAmountGrosze, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (uuid, name, categoryId, defaultDueDay, isActive, useFixedAmount, fixedAmountGrosze, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        input.uuid ?? newUuid(),
         input.name,
         input.categoryId,
         input.defaultDueDay,
@@ -557,11 +576,12 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const now = new Date().toISOString();
     const result = await this.db.run(
       `INSERT INTO subscription
-         (name, amountGrosze, frequencyType, customIntervalMonths, startDate, nextPaymentDate,
+         (uuid, name, amountGrosze, frequencyType, customIntervalMonths, startDate, nextPaymentDate,
           categoryId, isActive, lastUsageConfirmationDate, confirmationIntervalMonths,
           createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        input.uuid ?? newUuid(),
         input.name,
         input.amountGrosze,
         input.frequencyType,
@@ -663,6 +683,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   private toIncome(row: IncomeRow): Income {
     return {
       id: row.id,
+      uuid: row.uuid,
       personName: row.personName,
       amountGrosze: row.amountGrosze,
       month: row.month,
@@ -690,9 +711,9 @@ export class SqliteExpensesRepository implements ExpensesRepository {
   async createIncome(input: NewIncome): Promise<Income> {
     const now = new Date().toISOString();
     const result = await this.db.run(
-      `INSERT INTO income (personName, amountGrosze, month, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?)`,
-      [input.personName, input.amountGrosze, input.month, now, now]
+      `INSERT INTO income (uuid, personName, amountGrosze, month, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [input.uuid ?? newUuid(), input.personName, input.amountGrosze, input.month, now, now]
     );
 
     const created = await this.getIncome(result.lastInsertRowId);
@@ -861,23 +882,29 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     return { ...this.toPayment(row), status: row.status as Payment['status'] };
   }
 
+  async listDeletedRecords(): Promise<DeletedRecord[]> {
+    return this.db.all<DeletedRecord>(
+      `SELECT entityType, uuid, deletedAt FROM deleted_record ORDER BY deletedAt, uuid`
+    );
+  }
+
   async exportSnapshot(): Promise<BackupSnapshot> {
     // Bez `WHERE isActive = 1` — kopia bierze też rekordy ukryte (7.5).
     // Pominięcie ich sprawiłoby, że po odtworzeniu wyłączony rachunek
     // cykliczny wróciłby jako aktywny albo zniknąłby razem z historią.
     const categoryRows = await this.db.all<CategoryRow>(
-      'SELECT id, name, iconKey, isActive, sortOrder, usedBy FROM category ORDER BY id'
+      'SELECT id, uuid, name, iconKey, isActive, sortOrder, usedBy FROM category ORDER BY id'
     );
     const paymentRows = await this.db.all<PaymentRow>(
       `SELECT ${PAYMENT_COLUMNS} FROM payment ORDER BY id`
     );
     const billTemplateRows = await this.db.all<BillTemplateRow>(
-      `SELECT id, name, categoryId, defaultDueDay, isActive, useFixedAmount,
+      `SELECT id, uuid, name, categoryId, defaultDueDay, isActive, useFixedAmount,
               fixedAmountGrosze, createdAt, updatedAt
          FROM bill_template ORDER BY id`
     );
     const subscriptionRows = await this.db.all<SubscriptionRow>(
-      `SELECT id, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
+      `SELECT id, uuid, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
               nextPaymentDate, categoryId, isActive, lastUsageConfirmationDate,
               confirmationIntervalMonths, createdAt, updatedAt
          FROM subscription ORDER BY id`
@@ -906,6 +933,7 @@ export class SqliteExpensesRepository implements ExpensesRepository {
         year: row.year,
         month: row.month,
       })),
+      deletedRecords: await this.listDeletedRecords(),
     };
   }
 
@@ -926,6 +954,13 @@ export class SqliteExpensesRepository implements ExpensesRepository {
 
     try {
       await this.db.exec(`
+        -- Ślad po skasowanych czyścimy RAZEM z resztą, i to nie przypadkiem:
+        -- kasowanie tabel wyżej samo tworzy nagrobki wyzwalaczami z migracji 4.
+        -- Zostawione, kazałyby synchronizacji skasować na serwerze wszystko,
+        -- co właśnie odtworzyliśmy z kopii. Nagrobki sprzed odtworzenia też
+        -- odchodzą — kopia zapasowa jest pełnym obrazem stanu, a nie łatką
+        -- na stan bieżący. Czyścimy je PO kasowaniu tabel, bo inaczej
+        -- wyzwalacze zapisałyby nagrobki już po wyczyszczeniu rejestru.
         DELETE FROM generated_record;
         DELETE FROM saved_report;
         DELETE FROM income;
@@ -933,13 +968,15 @@ export class SqliteExpensesRepository implements ExpensesRepository {
         DELETE FROM bill_template;
         DELETE FROM subscription;
         DELETE FROM category;
+        DELETE FROM deleted_record;
       `);
 
       for (const category of snapshot.categories) {
         await this.db.run(
-          'INSERT INTO category (id, name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO category (id, uuid, name, iconKey, isActive, sortOrder, usedBy) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
             category.id,
+            category.uuid,
             category.name,
             category.iconKey,
             toDbBool(category.isActive),
@@ -952,11 +989,12 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       for (const template of snapshot.billTemplates) {
         await this.db.run(
           `INSERT INTO bill_template
-             (id, name, categoryId, defaultDueDay, isActive, useFixedAmount,
+             (id, uuid, name, categoryId, defaultDueDay, isActive, useFixedAmount,
               fixedAmountGrosze, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             template.id,
+            template.uuid,
             template.name,
             template.categoryId,
             template.defaultDueDay,
@@ -972,12 +1010,13 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       for (const subscription of snapshot.subscriptions) {
         await this.db.run(
           `INSERT INTO subscription
-             (id, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
+             (id, uuid, name, amountGrosze, frequencyType, customIntervalMonths, startDate,
               nextPaymentDate, categoryId, isActive, lastUsageConfirmationDate,
               confirmationIntervalMonths, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             subscription.id,
+            subscription.uuid,
             subscription.name,
             subscription.amountGrosze,
             subscription.frequencyType,
@@ -997,12 +1036,13 @@ export class SqliteExpensesRepository implements ExpensesRepository {
       for (const payment of snapshot.payments) {
         await this.db.run(
           `INSERT INTO payment
-             (id, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+             (id, uuid, mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
               status, source, merchant, description, paymentMethod, billTemplateId,
               subscriptionId, receiptImagePath, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             payment.id,
+            payment.uuid,
             payment.mainType,
             payment.categoryId,
             payment.title,
@@ -1026,16 +1066,25 @@ export class SqliteExpensesRepository implements ExpensesRepository {
 
       for (const income of snapshot.incomes) {
         await this.db.run(
-          `INSERT INTO income (id, personName, amountGrosze, month, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO income (id, uuid, personName, amountGrosze, month, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             income.id,
+            income.uuid,
             income.personName,
             income.amountGrosze,
             income.month,
             income.createdAt,
             income.updatedAt,
           ]
+        );
+      }
+
+      for (const record of snapshot.deletedRecords) {
+        await this.db.run(
+          `INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+           VALUES (?, ?, ?, 1)`,
+          [record.entityType, record.uuid, record.deletedAt]
         );
       }
 

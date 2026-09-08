@@ -27,8 +27,18 @@ const TEXTS: ProposalTexts = {
 
 const MONTH = { year: 2026, month: 8 };
 
+/**
+ * Identyfikator wyliczony z numeru rekordu.
+ *
+ * Testy porównują całe rekordy ze sobą, więc losowy identyfikator sprawiłby,
+ * że ten sam rekord zbudowany dwa razy przestałby być równy sam sobie.
+ * Zera z przodu dają 32 znaki, czyli kształt, jakiego wymaga `isUuid`.
+ */
+const testUuid = (id: number): string => String(id).padStart(32, '0');
+
 const GAS_TEMPLATE: BillTemplate = {
   id: 3,
+  uuid: testUuid(3),
   name: 'Gaz',
   categoryId: 1,
   defaultDueDay: 28,
@@ -39,10 +49,17 @@ const GAS_TEMPLATE: BillTemplate = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
-const POWER_TEMPLATE: BillTemplate = { ...GAS_TEMPLATE, id: 2, name: 'Prąd', defaultDueDay: 15 };
+const POWER_TEMPLATE: BillTemplate = {
+  ...GAS_TEMPLATE,
+  id: 2,
+  uuid: testUuid(2),
+  name: 'Prąd',
+  defaultDueDay: 15,
+};
 
 const FOOD_CATEGORY: Category = {
   id: 10,
+  uuid: testUuid(10),
   usedBy: [MainType.SUBSCRIPTION, MainType.PURCHASE],
   name: 'Jedzenie',
   iconKey: 'restaurant-outline',
@@ -52,6 +69,7 @@ const FOOD_CATEGORY: Category = {
 
 const NETFLIX: Subscription = {
   id: 7,
+  uuid: testUuid(7),
   name: 'Netflix',
   amountGrosze: 4300,
   frequencyType: FrequencyType.MONTHLY,
@@ -69,8 +87,11 @@ const NETFLIX: Subscription = {
 let nextId = 1;
 
 function bill(month: number, amountGrosze: number | null, billTemplateId = 3): Payment {
+  const id = nextId++;
+
   return {
-    id: nextId++,
+    id,
+    uuid: testUuid(id),
     mainType: MainType.BILL,
     categoryId: 1,
     title: 'Rachunek',
@@ -103,8 +124,11 @@ function purchase(month: number, day: number, amountGrosze: number, categoryId =
 }
 
 function salary(month: number, amountGrosze: number): Income {
+  const id = nextId++;
+
   return {
-    id: nextId++,
+    id,
+    uuid: testUuid(id),
     personName: 'Ola',
     amountGrosze,
     month: `2026-${String(month).padStart(2, '0')}`,

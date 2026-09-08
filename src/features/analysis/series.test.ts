@@ -4,10 +4,20 @@ import type { Income, Payment } from '@/domain/models';
 
 import { buildSeries, compareYears, matchesSubject, summarizeSeries } from './series';
 
+/**
+ * Identyfikator wyliczony z numeru rekordu.
+ *
+ * Testy porównują całe rekordy ze sobą, więc losowy identyfikator sprawiłby,
+ * że ten sam rekord zbudowany dwa razy przestałby być równy sam sobie.
+ * Zera z przodu dają 32 znaki, czyli kształt, jakiego wymaga `isUuid`.
+ */
+const testUuid = (id: number): string => String(id).padStart(32, '0');
+
 /** Płatność z minimum pól — testy nadpisują tylko to, co bada dany przypadek. */
 function payment(overrides: Partial<Payment> & Pick<Payment, 'effectiveDate'>): Payment {
   return {
     id: 1,
+    uuid: testUuid(1),
     mainType: MainType.BILL,
     categoryId: 1,
     title: 'Gaz',
@@ -31,6 +41,7 @@ function payment(overrides: Partial<Payment> & Pick<Payment, 'effectiveDate'>): 
 function income(month: string, amountGrosze: number, id = 1): Income {
   return {
     id,
+    uuid: testUuid(id),
     personName: 'Ola',
     amountGrosze,
     month,

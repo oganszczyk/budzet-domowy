@@ -16,7 +16,7 @@
  */
 
 import type { SavedReport } from '@/domain/analysis';
-import type { BackupSnapshot } from '@/domain/backup';
+import type { BackupSnapshot, DeletedRecord } from '@/domain/backup';
 import type { MainType } from '@/domain/enums';
 import type {
   BillTemplate,
@@ -29,31 +29,57 @@ import type {
 import type { YearMonth } from '@/lib/date';
 
 /** Dane potrzebne do utworzenia nowej płatności. Resztę pól uzupełnia repozytorium. */
-export type NewPayment = Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>;
+/**
+ * DLACZEGO `uuid` JEST NIEOBOWIĄZKOWY PRZY TWORZENIU (Etap 14b).
+ *
+ * Trwały identyfikator jest OBOWIĄZKOWY w gotowym rekordzie — bez niego
+ * synchronizacja nie ma czym rozpoznać wydatku na drugim telefonie. Ale
+ * przy TWORZENIU podaje się go tylko wtedy, gdy rekord ma zachować cudzy
+ * identyfikator: przy odtwarzaniu kopii zapasowej i przy pobraniu rekordu
+ * z serwera. W pozostałych kilkunastu miejscach — formularzach, automacie
+ * rachunków, danych demonstracyjnych, zasiewie i testach — nadaje go baza.
+ *
+ * Gdyby był wymagany, każde z tych miejsc musiałoby zawołać generator,
+ * a pominięcie jednego przeszłoby przez kompilator dopiero po dopisaniu
+ * tam pola z byle jaką wartością. Nieobowiązkowe pole odwraca ten układ:
+ * kto milczy, dostaje poprawny identyfikator z bazy.
+ */
+export type NewPayment = Omit<Payment, 'id' | 'uuid' | 'createdAt' | 'updatedAt'> & {
+  uuid?: string;
+};
 
 /** Pola, które wolno zmienić w istniejącej płatności. */
-export type PaymentPatch = Partial<Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>>;
+export type PaymentPatch = Partial<Omit<Payment, 'id' | 'uuid' | 'createdAt' | 'updatedAt'>>;
 
 /** Dane potrzebne do utworzenia szablonu rachunku cyklicznego. */
-export type NewBillTemplate = Omit<BillTemplate, 'id' | 'createdAt' | 'updatedAt'>;
+export type NewBillTemplate = Omit<BillTemplate, 'id' | 'uuid' | 'createdAt' | 'updatedAt'> & {
+  uuid?: string;
+};
 
 /** Pola, które wolno zmienić w szablonie rachunku. */
-export type BillTemplatePatch = Partial<NewBillTemplate>;
+export type BillTemplatePatch = Partial<Omit<NewBillTemplate, 'uuid'>>;
 
 /** Dane potrzebne do utworzenia subskrypcji (7.4). */
-export type NewSubscription = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>;
+export type NewSubscription = Omit<Subscription, 'id' | 'uuid' | 'createdAt' | 'updatedAt'> & {
+  uuid?: string;
+};
 
 /** Pola, które wolno zmienić w subskrypcji. */
-export type SubscriptionPatch = Partial<NewSubscription>;
+export type SubscriptionPatch = Partial<Omit<NewSubscription, 'uuid'>>;
 
 /** Dane potrzebne do utworzenia podkategorii (7.1). */
-export type NewCategory = Omit<Category, 'id' | 'sortOrder'> & { sortOrder?: number };
+export type NewCategory = Omit<Category, 'id' | 'uuid' | 'sortOrder'> & {
+  sortOrder?: number;
+  uuid?: string;
+};
 
 /** Dane potrzebne do zapisania dochodu domownika (Etap 11). */
-export type NewIncome = Omit<Income, 'id' | 'createdAt' | 'updatedAt'>;
+export type NewIncome = Omit<Income, 'id' | 'uuid' | 'createdAt' | 'updatedAt'> & {
+  uuid?: string;
+};
 
 /** Pola, które wolno zmienić w zapisanym dochodzie. */
-export type IncomePatch = Partial<NewIncome>;
+export type IncomePatch = Partial<Omit<NewIncome, 'uuid'>>;
 
 /** Dane potrzebne do zapisania zestawienia (Etap 13). Kolejność nadaje repozytorium. */
 export type NewSavedReport = Omit<SavedReport, 'id' | 'sortOrder' | 'createdAt' | 'updatedAt'> & {
@@ -247,6 +273,15 @@ export interface ExpensesRepository {
    * także po rekordy nieaktywne i po rejestr wygenerowanych rachunków, których
    * zwykłe metody odczytu celowo nie pokazują.
    */
+  /**
+   * Etap 14b: rekordy skasowane przez użytkownika, których nie ma już w bazie.
+   *
+   * Potrzebne kopii zapasowej i — od Etapu 14c — synchronizacji. Wyliczyć
+   * tego nie da się z niczego innego: skasowany wydatek nie zostawia po sobie
+   * żadnego śladu poza tą listą.
+   */
+  listDeletedRecords(): Promise<DeletedRecord[]>;
+
   exportSnapshot(): Promise<BackupSnapshot>;
 
   /**

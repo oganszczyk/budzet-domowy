@@ -82,23 +82,32 @@ describe('migracje (1.2)', () => {
 
     const oldRepo = new SqliteExpensesRepository(db);
     const [category] = await oldRepo.listCategories(MainType.PURCHASE);
-    const created = await oldRepo.createPayment({
-      mainType: MainType.PURCHASE,
-      categoryId: category.id,
-      title: 'Lidl',
-      amountGrosze: 12550,
-      effectiveDate: dueDateFor(THIS_MONTH, 5),
-      dueDate: null,
-      paidDate: null,
-      status: null,
-      source: PaymentSource.MANUAL,
-      merchant: 'Lidl',
-      description: null,
-      paymentMethod: null,
-      billTemplateId: null,
-      subscriptionId: null,
-      receiptImagePath: null,
-    });
+
+    // Wydatek wstawiony ZAPYTANIEM Z EPOKI TEJ BAZY, a nie przez dzisiejsze
+    // repozytorium. Repozytorium zna aktualny schemat i wstawia kolumny,
+    // których wersja 1 nie ma. Odgrywamy telefon, na którym dane zapisała
+    // STARA aplikacja — a potem przyszła aktualizacja.
+    const insertedAt = new Date().toISOString();
+    const inserted = await db.run(
+      `INSERT INTO payment
+         (mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+          status, source, merchant, description, paymentMethod, billTemplateId,
+          subscriptionId, receiptImagePath, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)`,
+      [
+        MainType.PURCHASE,
+        category.id,
+        'Lidl',
+        12550,
+        dueDateFor(THIS_MONTH, 5),
+        PaymentSource.MANUAL,
+        'Lidl',
+        insertedAt,
+        insertedAt,
+      ]
+    );
+
+    const created = { id: inserted.lastInsertRowId };
 
     // --- aktualizacja aplikacji ---
     const result = await migrate(db);
@@ -140,10 +149,9 @@ describe('migracje (1.2)', () => {
 /**
  * Etap 13, wersja 3 schematu.
  *
- * `uuid` celowo NIE należy do modelu danych — jest wyłącznie kolumną bazy,
- * przygotowaną pod przyszłą synchronizację z drugim telefonem. Skoro nie
- * przechodzi przez typy TypeScriptu, nie pilnuje go kompilator i tym bardziej
- * musi go pilnować test.
+ * Kolumna `uuid` powstała w Etapie 13 jako sama kolumna, przed modelem
+ * danych. Od Etapu 14b należy też do typów, ale wypełnia ją nadal baza —
+ * i to jest ta część, której kompilator nie sprawdzi za nas.
  */
 describe('wersja 3 schematu: zestawienia i trwałe identyfikatory', () => {
   /** Odtwarza bazę w wersji 1 z jednym wydatkiem — stan sprzed aktualizacji. */
@@ -155,25 +163,32 @@ describe('wersja 3 schematu: zestawienia i trwałe identyfikatory', () => {
 
     const repo = new SqliteExpensesRepository(db);
     const [category] = await repo.listCategories(MainType.PURCHASE);
-    const payment = await repo.createPayment({
-      mainType: MainType.PURCHASE,
-      categoryId: category.id,
-      title: 'Lidl',
-      amountGrosze: 12550,
-      effectiveDate: dueDateFor(THIS_MONTH, 5),
-      dueDate: null,
-      paidDate: null,
-      status: null,
-      source: PaymentSource.MANUAL,
-      merchant: 'Lidl',
-      description: null,
-      paymentMethod: null,
-      billTemplateId: null,
-      subscriptionId: null,
-      receiptImagePath: null,
-    });
 
-    return { db, payment };
+    // Wydatek wstawiony ZAPYTANIEM Z EPOKI TEJ BAZY, a nie przez dzisiejsze
+    // repozytorium. Repozytorium zna aktualny schemat i wstawia kolumny,
+    // których wersja 1 nie ma. Odgrywamy telefon, na którym dane zapisała
+    // STARA aplikacja — a potem przyszła aktualizacja.
+    const insertedAt = new Date().toISOString();
+    const inserted = await db.run(
+      `INSERT INTO payment
+         (mainType, categoryId, title, amountGrosze, effectiveDate, dueDate, paidDate,
+          status, source, merchant, description, paymentMethod, billTemplateId,
+          subscriptionId, receiptImagePath, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)`,
+      [
+        MainType.PURCHASE,
+        category.id,
+        'Lidl',
+        12550,
+        dueDateFor(THIS_MONTH, 5),
+        PaymentSource.MANUAL,
+        'Lidl',
+        insertedAt,
+        insertedAt,
+      ]
+    );
+
+    return { db, payment: { id: inserted.lastInsertRowId } };
   }
 
   it('tworzy tabelę zapisanych zestawień', async () => {
@@ -216,9 +231,11 @@ describe('wersja 3 schematu: zestawienia i trwałe identyfikatory', () => {
   });
 
   it('nowe rekordy dostają identyfikator bez udziału repozytorium', async () => {
-    // Repozytorium nie wie o kolumnie `uuid` i nie wstawia jej do zapytań.
-    // Wypełnia ją wyzwalacz — inaczej wszystko utworzone po aktualizacji
-    // zostałoby bez identyfikatora, po cichu, aż do dnia synchronizacji.
+    // Repozytorium wstawia `uuid` samo (Etap 14b), ale wyzwalacz zostaje jako
+    // zabezpieczenie dla zapisów, które o kolumnie zapomną — a takich zapytań
+    // przybędzie wraz z synchronizacją. Ten test pilnuje, żeby ono działało:
+    // gdyby wyzwalacz zniknął, brak identyfikatora ujawniłby się dopiero
+    // w dniu, w którym drugi telefon przestałby rozpoznawać rekordy.
     const db = openNodeDatabase();
     await migrate(db);
     await seedDefaults(db);
@@ -451,5 +468,184 @@ describe('T-16: ponowne uruchomienie aplikacji', () => {
       for (const db of opened) await db.close?.();
       fs.rmSync(file, { force: true });
     }
+  });
+});
+
+/**
+ * Etap 14b, wersja 4 schematu.
+ *
+ * Obie rzeczy z tej migracji — ślad po skasowanych i znacznik „do wysłania" —
+ * prowadzą WYZWALACZE, a nie kod aplikacji. To świadoma decyzja (uzasadnienie
+ * w `migrations.ts`), ale ma cenę: TypeScript nie sprawdzi ani jednego z nich.
+ * Jeżeli wyzwalacz zniknie albo dostanie zły warunek, aplikacja będzie działać
+ * bez zarzutu do dnia pierwszej synchronizacji — a wtedy skasowane wydatki
+ * zaczną wracać. Te testy są jedynym miejscem, w którym da się to złapać.
+ */
+describe('wersja 4 schematu: ślad po skasowanych i znacznik do wysłania', () => {
+  /** Baza w najnowszej wersji, z domyślnymi kategoriami i jednym wydatkiem. */
+  async function databaseWithPayment() {
+    const db = openNodeDatabase();
+    await migrate(db);
+    await seedDefaults(db);
+
+    const repo = new SqliteExpensesRepository(db);
+    const [category] = await repo.listCategories(MainType.PURCHASE);
+    const payment = await repo.createPayment({
+      mainType: MainType.PURCHASE,
+      categoryId: category.id,
+      title: 'Lidl',
+      amountGrosze: 12550,
+      effectiveDate: dueDateFor(THIS_MONTH, 5),
+      dueDate: null,
+      paidDate: null,
+      status: null,
+      source: PaymentSource.MANUAL,
+      merchant: 'Lidl',
+      description: null,
+      paymentMethod: null,
+      billTemplateId: null,
+      subscriptionId: null,
+      receiptImagePath: null,
+    });
+
+    return { db, repo, payment };
+  }
+
+  const readPendingFlag = (db: ReturnType<typeof openNodeDatabase>, id: number) =>
+    db.first<{ pendingSync: number }>('SELECT pendingSync FROM payment WHERE id = ?', [id]);
+
+  it('tworzy tabelę skasowanych rekordów', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+
+    const tables = await db.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'"
+    );
+
+    expect(tables.map((table) => table.name)).toContain('deleted_record');
+  });
+
+  it('skasowanie wydatku zostawia jego trwały identyfikator', async () => {
+    const { db, repo, payment } = await databaseWithPayment();
+
+    await repo.deletePayment(payment.id);
+
+    const rows = await db.all<{ entityType: string; uuid: string; deletedAt: string }>(
+      'SELECT entityType, uuid, deletedAt FROM deleted_record'
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].entityType).toBe('PAYMENT');
+    // Identyfikator LOKALNY zniknął razem z wierszem; zostaje ten trwały,
+    // bo tylko on coś znaczy dla drugiego telefonu.
+    expect(rows[0].uuid).toBe(payment.uuid);
+    expect(rows[0].deletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('skasowanie dochodu też zostawia ślad', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+    const repo = new SqliteExpensesRepository(db);
+
+    const income = await repo.createIncome({
+      personName: 'Ola',
+      amountGrosze: 620000,
+      month: '2026-08',
+    });
+    await repo.deleteIncome(income.id);
+
+    const rows = await db.all<{ entityType: string; uuid: string }>(
+      'SELECT entityType, uuid FROM deleted_record'
+    );
+
+    expect(rows).toEqual([{ entityType: 'INCOME', uuid: income.uuid }]);
+  });
+
+  it('nowy rekord jest od razu oznaczony do wysłania', async () => {
+    const { db, payment } = await databaseWithPayment();
+
+    // Serwer nie widział go jeszcze ani razu.
+    expect((await readPendingFlag(db, payment.id))?.pendingSync).toBe(1);
+  });
+
+  it('rekordy sprzed aktualizacji też są oznaczone do wysłania', async () => {
+    // Kolumna wchodzi z `DEFAULT 1`, więc cała dotychczasowa historia czeka
+    // na pierwszą wysyłkę. Gdyby weszła z zerem, wszystko, co użytkownik
+    // wpisał przed założeniem konta, nigdy nie trafiłoby do chmury.
+    const db = openNodeDatabase();
+    await db.exec(MIGRATIONS[0]);
+    await db.exec('PRAGMA user_version = 1');
+    await seedDefaults(db);
+
+    await migrate(db);
+
+    const rows = await db.all<{ pendingSync: number }>('SELECT pendingSync FROM category');
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.pendingSync === 1)).toBe(true);
+  });
+
+  it('edycja wysłanego rekordu oznacza go do wysłania ponownie', async () => {
+    const { db, repo, payment } = await databaseWithPayment();
+
+    // Udana wysyłka: znacznik gaśnie.
+    await db.run('UPDATE payment SET pendingSync = 0 WHERE id = ?', [payment.id]);
+    expect((await readPendingFlag(db, payment.id))?.pendingSync).toBe(0);
+
+    await repo.updatePayment(payment.id, { amountGrosze: 9900 });
+
+    expect((await readPendingFlag(db, payment.id))?.pendingSync).toBe(1);
+  });
+
+  it('zgaszenie znacznika po wysyłce nie zapala go z powrotem', async () => {
+    // Bez tego synchronizacja nigdy by się nie kończyła: każde zgaszenie
+    // znacznika byłoby zmianą rekordu, więc wyzwalacz zapalałby go na nowo,
+    // a następna wysyłka wysyłałaby to samo raz jeszcze. W nieskończoność.
+    const { db, payment } = await databaseWithPayment();
+
+    await db.run('UPDATE payment SET pendingSync = 0 WHERE id = ?', [payment.id]);
+
+    expect((await readPendingFlag(db, payment.id))?.pendingSync).toBe(0);
+  });
+
+  it('powtórna edycja niewysłanego rekordu niczego nie psuje', async () => {
+    // Warunek wyzwalacza celowo NIE obejmuje przypadku 1 → 1. Ten test
+    // pilnuje, że pominięcie go nie gasi znacznika ani nie zapętla zapisu.
+    const { db, repo, payment } = await databaseWithPayment();
+
+    await repo.updatePayment(payment.id, { amountGrosze: 9900 });
+    await repo.updatePayment(payment.id, { amountGrosze: 8800 });
+
+    expect((await readPendingFlag(db, payment.id))?.pendingSync).toBe(1);
+    expect((await repo.getPayment(payment.id))?.amountGrosze).toBe(8800);
+  });
+
+  it('odtworzenie kopii nie zostawia nagrobków po skasowanych tabelach', async () => {
+    // Odtwarzanie kasuje całą zawartość bazy, a wyzwalacze wystawiają nagrobek
+    // za każdy skasowany wiersz. Zostawione, kazałyby synchronizacji usunąć
+    // z serwera dokładnie to, co właśnie odtworzyliśmy z kopii.
+    const { db, repo } = await databaseWithPayment();
+
+    const snapshot = await repo.exportSnapshot();
+    await repo.importSnapshot(snapshot);
+
+    const rows = await db.all<{ uuid: string }>('SELECT uuid FROM deleted_record');
+
+    expect(rows).toEqual([]);
+  });
+
+  it('odtworzenie kopii przywraca nagrobki zapisane w kopii', async () => {
+    const { repo, payment } = await databaseWithPayment();
+
+    await repo.deletePayment(payment.id);
+    const snapshot = await repo.exportSnapshot();
+    expect(snapshot.deletedRecords).toHaveLength(1);
+
+    await repo.importSnapshot(snapshot);
+
+    // Wiedza „ten wydatek został skasowany" przeżywa odtworzenie kopii.
+    expect(await repo.listDeletedRecords()).toEqual([
+      expect.objectContaining({ entityType: 'PAYMENT', uuid: payment.uuid }),
+    ]);
   });
 });

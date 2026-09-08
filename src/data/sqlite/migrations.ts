@@ -216,6 +216,133 @@ export const MIGRATIONS: string[] = [
     WHEN new.uuid IS NULL
     BEGIN UPDATE income SET uuid = lower(hex(randomblob(16))) WHERE id = new.id; END;
   `,
+
+  // --- wersja 4: ślad po skasowanych i znacznik „do wysłania" (Etap 14b) ---
+  //
+  // Dwie rzeczy, bez których synchronizacja nie może działać poprawnie.
+  //
+  // ŚLAD PO SKASOWANYCH (`deleted_record`).
+  //
+  // Bez niego usunięcie wydatku byłoby nieodwracalne tylko z pozoru. Telefon A
+  // kasuje wydatek i po prostu przestaje go mieć. Przy najbliższej wymianie
+  // danych telefon B — który tego wydatku nie kasował — nadal go ma i wysyła.
+  // Telefon A widzi rekord, którego u siebie nie zna, więc uznaje go za nowy
+  // i zapisuje z powrotem. Skasowany wydatek WRACA, i to za każdym razem;
+  // nie da się go usunąć na stałe na żadnym z telefonów.
+  //
+  // Dlatego kasowanie musi zostawiać jawny zapis „ten rekord został usunięty",
+  // który da się rozesłać tak samo jak każdą inną zmianę. Zapisujemy `uuid`,
+  // a nie `id`, bo lokalny numer nic nie znaczy poza tym jednym telefonem.
+  //
+  // WYZWALACZ, NIE ZMIANA ZAPYTAŃ `DELETE` — z tego samego powodu, dla którego
+  // wyzwalaczem nadajemy `uuid` w wersji 3. Kasowanie dzieje się w kilku
+  // miejscach repozytorium i przybędzie go wraz z kolejnymi funkcjami.
+  // Zapomniany jeden `DELETE` nie psuje niczego widocznego — objawia się
+  // dopiero wracającym wydatkiem, wiele dni później, na drugim urządzeniu.
+  //
+  // ZNACZNIK „DO WYSŁANIA" (`pendingSync`).
+  //
+  // Wysyłanie całej bazy przy każdej synchronizacji działałoby przy stu
+  // wydatkach i przestałoby przy kilku tysiącach. Znacznik mówi, których
+  // rekordów serwer jeszcze nie widział w tej postaci.
+  //
+  // Nowa kolumna dostaje `DEFAULT 1`, więc WSZYSTKIE dotychczasowe rekordy
+  // są od razu oznaczone jako do wysłania — i słusznie, bo serwer nie widział
+  // dotąd żadnego.
+  //
+  // Wyzwalacz `AFTER UPDATE` ma warunek `old.pendingSync = 0 AND
+  // new.pendingSync = 0`, który wygląda dziwnie, ale jest przemyślany:
+  //
+  //   * edycja czystego rekordu (0 → 0, bo zapytanie nie rusza tej kolumny)
+  //     spełnia warunek i podnosi znacznik na 1 — o to chodzi;
+  //   * edycja rekordu już oznaczonego (1 → 1) warunku nie spełnia, ale też
+  //     nie musi, bo znacznik jest już podniesiony;
+  //   * skasowanie znacznika po udanej wysyłce (1 → 0) warunku nie spełnia,
+  //     więc wysyłka nie oznacza rekordu z powrotem jako niewysłanego —
+  //     bez tego synchronizacja nigdy by się nie kończyła;
+  //   * zapis wykonany przez sam wyzwalacz (0 → 1) warunku nie spełnia,
+  //     więc wyzwalacz nie wywołuje sam siebie w nieskończoność.
+  //
+  // Indeksy są CZĘŚCIOWE (`WHERE pendingSync = 1`). Zwykły indeks na kolumnie
+  // o dwóch wartościach jest bezużyteczny — połowa bazy pod jednym kluczem.
+  // Częściowy zawiera wyłącznie rekordy do wysłania, czyli zwykle garść,
+  // i po synchronizacji jest niemal pusty.
+  `
+  CREATE TABLE deleted_record (
+    -- 'PAYMENT', 'CATEGORY', 'BILL_TEMPLATE', 'SUBSCRIPTION', 'INCOME'.
+    entityType TEXT NOT NULL,
+    -- Trwały identyfikator skasowanego rekordu; jego wiersza już nie ma.
+    uuid TEXT NOT NULL,
+    deletedAt TEXT NOT NULL,
+    pendingSync INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (entityType, uuid)
+  );
+
+  CREATE INDEX idx_deleted_record_pending
+    ON deleted_record(pendingSync) WHERE pendingSync = 1;
+
+  ALTER TABLE category ADD COLUMN pendingSync INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE bill_template ADD COLUMN pendingSync INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE subscription ADD COLUMN pendingSync INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE payment ADD COLUMN pendingSync INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE income ADD COLUMN pendingSync INTEGER NOT NULL DEFAULT 1;
+
+  CREATE INDEX idx_category_pending ON category(pendingSync) WHERE pendingSync = 1;
+  CREATE INDEX idx_bill_template_pending ON bill_template(pendingSync) WHERE pendingSync = 1;
+  CREATE INDEX idx_subscription_pending ON subscription(pendingSync) WHERE pendingSync = 1;
+  CREATE INDEX idx_payment_pending ON payment(pendingSync) WHERE pendingSync = 1;
+  CREATE INDEX idx_income_pending ON income(pendingSync) WHERE pendingSync = 1;
+
+  CREATE TRIGGER trg_category_pending AFTER UPDATE ON category
+    WHEN old.pendingSync = 0 AND new.pendingSync = 0
+    BEGIN UPDATE category SET pendingSync = 1 WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_bill_template_pending AFTER UPDATE ON bill_template
+    WHEN old.pendingSync = 0 AND new.pendingSync = 0
+    BEGIN UPDATE bill_template SET pendingSync = 1 WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_subscription_pending AFTER UPDATE ON subscription
+    WHEN old.pendingSync = 0 AND new.pendingSync = 0
+    BEGIN UPDATE subscription SET pendingSync = 1 WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_payment_pending AFTER UPDATE ON payment
+    WHEN old.pendingSync = 0 AND new.pendingSync = 0
+    BEGIN UPDATE payment SET pendingSync = 1 WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_income_pending AFTER UPDATE ON income
+    WHEN old.pendingSync = 0 AND new.pendingSync = 0
+    BEGIN UPDATE income SET pendingSync = 1 WHERE id = new.id; END;
+
+  CREATE TRIGGER trg_category_deleted AFTER DELETE ON category
+    BEGIN
+      INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+      VALUES ('CATEGORY', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
+    END;
+
+  CREATE TRIGGER trg_bill_template_deleted AFTER DELETE ON bill_template
+    BEGIN
+      INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+      VALUES ('BILL_TEMPLATE', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
+    END;
+
+  CREATE TRIGGER trg_subscription_deleted AFTER DELETE ON subscription
+    BEGIN
+      INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+      VALUES ('SUBSCRIPTION', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
+    END;
+
+  CREATE TRIGGER trg_payment_deleted AFTER DELETE ON payment
+    BEGIN
+      INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+      VALUES ('PAYMENT', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
+    END;
+
+  CREATE TRIGGER trg_income_deleted AFTER DELETE ON income
+    BEGIN
+      INSERT OR REPLACE INTO deleted_record (entityType, uuid, deletedAt, pendingSync)
+      VALUES ('INCOME', old.uuid, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1);
+    END;
+  `,
 ];
 
 /** Wersja schematu, do której doprowadzają wszystkie migracje. */

@@ -8,9 +8,19 @@ import {
   yearlyCostGrosze,
 } from './subscription-schedule';
 
+/**
+ * Identyfikator wyliczony z numeru rekordu.
+ *
+ * Testy porównują całe rekordy ze sobą, więc losowy identyfikator sprawiłby,
+ * że ten sam rekord zbudowany dwa razy przestałby być równy sam sobie.
+ * Zera z przodu dają 32 znaki, czyli kształt, jakiego wymaga `isUuid`.
+ */
+const testUuid = (id: number): string => String(id).padStart(32, '0');
+
 function makeSubscription(overrides: Partial<Subscription> = {}): Subscription {
   return {
     id: 1,
+    uuid: testUuid(1),
     name: 'Netflix',
     amountGrosze: 4300,
     frequencyType: FrequencyType.MONTHLY,
