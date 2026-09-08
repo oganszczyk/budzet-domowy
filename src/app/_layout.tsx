@@ -5,10 +5,16 @@
  *  1. SafeAreaProvider — żeby treść nie chowała się pod wycięciem aparatu
  *     ani pod paskiem gestów telefonu.
  *  2. QueryClientProvider — pamięć podręczna danych z bazy (patrz niżej).
- *  3. MonthProvider — wybrany miesiąc (4.3), wspólny dla wszystkich ekranów.
+ *  3. AuthProvider — stan konta w chmurze (Etap 14a).
+ *  4. MonthProvider — wybrany miesiąc (4.3), wspólny dla wszystkich ekranów.
  *
  * Kolejność ma znaczenie: MonthProvider jest wewnątrz QueryClientProvider,
  * bo zapytania o dane będą zależeć od wybranego miesiąca, a nie odwrotnie.
+ *
+ * AuthProvider stoi POWYŻEJ MonthProvider, bo od Etapu 14d to, kto jest
+ * zalogowany, będzie decydowało o zawartości bazy — a wybrany miesiąc jest
+ * tylko sposobem patrzenia na tę zawartość. Odwrotna kolejność zmuszałaby
+ * do przeładowania miesiąca przy każdej zmianie konta.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -18,6 +24,7 @@ import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { strings } from '@/constants/strings';
+import { AuthProvider } from '@/features/auth/auth-context';
 import { MonthProvider } from '@/features/month/month-context';
 import { colors } from '@/ui/theme';
 
@@ -46,35 +53,38 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <MonthProvider>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: colors.background },
-              headerTintColor: colors.primary,
-              headerTitleStyle: { color: colors.text, fontWeight: '700' },
-              headerShadowVisible: false,
-              contentStyle: { backgroundColor: colors.background },
-              headerBackButtonDisplayMode: 'minimal',
-            }}
-          >
-            {/* Zakładki mają własny nagłówek, więc ukrywamy nagłówek stosu. */}
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <AuthProvider>
+          <MonthProvider>
+            <StatusBar style="dark" />
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.primary,
+                headerTitleStyle: { color: colors.text, fontWeight: '700' },
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: colors.background },
+                headerBackButtonDisplayMode: 'minimal',
+              }}
+            >
+              {/* Zakładki mają własny nagłówek, więc ukrywamy nagłówek stosu. */}
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-            <Stack.Screen name="bills/index" options={{ title: strings.bills.title }} />
-            <Stack.Screen
-              name="subscriptions/index"
-              options={{ title: strings.subscriptions.title }}
-            />
-            <Stack.Screen name="purchases/index" options={{ title: strings.purchases.title }} />
-            <Stack.Screen name="backup" options={{ title: strings.backup.title }} />
-            <Stack.Screen name="income" options={{ title: strings.income.title }} />
-            <Stack.Screen
-              name="analysis/report"
-              options={{ title: strings.analysis.reportTitle }}
-            />
-          </Stack>
-        </MonthProvider>
+              <Stack.Screen name="bills/index" options={{ title: strings.bills.title }} />
+              <Stack.Screen
+                name="subscriptions/index"
+                options={{ title: strings.subscriptions.title }}
+              />
+              <Stack.Screen name="purchases/index" options={{ title: strings.purchases.title }} />
+              <Stack.Screen name="backup" options={{ title: strings.backup.title }} />
+              <Stack.Screen name="account" options={{ title: strings.account.title }} />
+              <Stack.Screen name="income" options={{ title: strings.income.title }} />
+              <Stack.Screen
+                name="analysis/report"
+                options={{ title: strings.analysis.reportTitle }}
+              />
+            </Stack>
+          </MonthProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -761,7 +761,121 @@ usuwa wielokropki pod osią. Pomiar mówi, że tak (najszerszy podpis 26,7 px
 przy słupku 32 px), ale wielokropki wyszły właśnie z różnicy między czcionką
 przeglądarki a systemową czcionką Androida.
 
-## Etap 14 — do rozstrzygnięcia 🔜
+## Etap 14 — synchronizacja dwóch telefonów (Supabase)
+
+Decyzja właściciela projektu (08.09.2026): drugi telefon ma widzieć te same
+wydatki. Specyfikacja wypycha synchronizację i konta poza MVP (3.2, P2), ale
+8.2 wprost dopuszcza późniejsze zastąpienie repozytorium lokalnego chmurowym —
+i po to powstał interfejs `ExpensesRepository`.
+
+**Wybrany wariant: SQLite pozostaje bazą główną, Supabase jest lustrem.**
+Aplikacja ma działać bez internetu, bo wydatek wpisuje się przy kasie.
+Wariant „Supabase zamiast SQLite" odrzucony z tego jednego powodu.
+
+Podział na cztery etapy, bo każdy z nich osobno kończy się działającą
+aplikacją (zasada 4 z `AGENTS.md`):
+
+| Etap | Zakres                                                        | Widoczne dla użytkownika            |
+| ---- | ------------------------------------------------------------- | ----------------------------------- |
+| 14a  | Klient Supabase, logowanie, ekran konta                       | Nowy ekran „Konto"                  |
+| 14b  | `uuid` w modelach, klucze obce po `uuid`, ślad po skasowanych | Nic — przebudowa fundamentu         |
+| 14c  | Tabele na serwerze + RLS, wysyłka zmian                       | Przycisk „Synchronizuj"             |
+| 14d  | Pobieranie, scalanie, rozstrzyganie konfliktów                | Drugi telefon widzi dane pierwszego |
+
+### Etap 14a — konto i logowanie ✅ ZAKOŃCZONY
+
+- [x] `@supabase/supabase-js` + `expo-secure-store` (wersje pod SDK 54)
+- [x] Odczyt konfiguracji z `.env` — `src/data/supabase/config.ts`
+- [x] Magazyn sesji dzielony na kawałki — `src/data/supabase/session-storage.ts`
+- [x] Klient tworzony leniwie — `src/data/supabase/client.ts`
+- [x] Stan konta w kontekście — `src/features/auth/auth-context.tsx`
+- [x] Tłumaczenie błędów serwera na polskie powody — `auth-errors.ts`
+- [x] Ekran konta z czterema stanami — `src/app/account.tsx`
+- [x] 27 nowych testów jednostkowych (razem 388, wszystkie przechodzą)
+
+**Etap 14a NIE RUSZA DANYCH.** Zalogowanie niczego nie wysyła ani nie pobiera.
+Ekran mówi to wprost, w żółtej ramce widocznej także po zalogowaniu — patrz
+niżej, dlaczego to nie jest nadmiarowa ostrożność.
+
+#### Ostrzeżenie o niedziałającej synchronizacji zostaje na ekranie ZAWSZE
+
+Kusiło, żeby po zalogowaniu je schować — wygląda jak usterka do naprawienia
+w następnym etapie. Zostaje, bo napis „Jesteś zalogowany" w aplikacji do
+wydatków czyta się jako „dane są bezpieczne w chmurze". Człowiek, który tak
+to zrozumie, przestanie robić kopie zapasowe — a kopia jest dziś jedynym
+zabezpieczeniem danych. Cena pomyłki jest niesymetryczna: nadmiarowe zdanie
+kosztuje chwilę czytania, brakujące kosztuje utratę całej historii wydatków.
+
+#### Sesja dzielona na kawałki, a nie zapisana w całości
+
+Dokumentacja Expo ostrzega, że SecureStore bywa odmawia przyjęcia wartości
+powyżej ~2048 bajtów, a sesja Supabase (dwa tokeny JWT plus dane konta)
+bywa dłuższa. Awaria byłaby podstępna: logowanie pozornie działa, a przy
+następnym uruchomieniu aplikacja wraca do ekranu logowania bez wyjaśnienia.
+`session-storage.ts` trzyma pod kluczem samą liczbę kawałków, a treść pod
+`klucz.0`, `klucz.1`. Test pilnuje, żeby ŻADEN pojedynczy wpis nie przekroczył
+limitu.
+
+Logika dzielenia jest oddzielona od SecureStore tym samym szwem, co baza
+(`expo-adapter` / `node-adapter`) — dzięki temu sprawdza ją 14 testów w Node,
+bez telefonu.
+
+#### Adres projektu jest obcinany z końcówki `/rest/v1`
+
+Panel Supabase pokazuje obok siebie adres projektu i adres końcówki REST,
+i przy pierwszym podłączeniu skopiowany został ten drugi. Biblioteka dokleja
+`/rest/v1` sama, więc taki adres dałby zapytania pod `/rest/v1/rest/v1/...` —
+czyli błąd 404 przy każdej operacji, z komunikatem nieprowadzącym do przyczyny.
+`normalizeProjectUrl` obcina tę końcówkę i cztery pokrewne.
+
+#### Brak pliku `.env` nie jest błędem
+
+Repozytorium jest publiczne. Kto je sklonuje, nie dostanie `.env` i nie ma
+własnego projektu w chmurze — aplikacja ma mu się uruchomić i działać na
+lokalnej bazie. `readSupabaseConfig` zwraca wtedy `null`, ekran konta pokazuje
+„Konto niedostępne", a cała reszta działa bez zmian.
+
+#### Sprawdzone w działającej aplikacji
+
+| Sprawdzenie                         | Wynik                                              |
+| ----------------------------------- | -------------------------------------------------- |
+| `npm run typecheck`                 | czysty                                             |
+| `npm run lint`                      | czysty                                             |
+| `npm test`                          | 388 testów, 21 zestawów — wszystkie przechodzą     |
+| `npx expo export --platform web`    | build przechodzi, trasa `/account` w wyniku        |
+| Wczytanie `.env` przez Metro        | ekran pokazał formularz, a nie „Konto niedostępne" |
+| Walidacja pustego formularza        | „Wypełnij oba pola."                               |
+| Przełącznik logowanie ↔ rejestracja | działa, zachowuje wpisany adres                    |
+
+**Do sprawdzenia na fizycznym telefonie:** założenie konta, przyjście listu
+potwierdzającego, zalogowanie, przeżycie sesji przez zamknięcie aplikacji
+i wylogowanie. Weryfikacja w przeglądarce nie obejmuje SecureStore — w wersji
+webowej sesja idzie do `localStorage`, więc dzielenie na kawałki i Keystore
+sprawdzą się dopiero na Androidzie.
+
+### Etap 14b — trwałe identyfikatory 🔜
+
+- [ ] `uuid` wchodzi do typów `Payment`, `Category`, `BillTemplate`,
+      `Subscription`, `Income` — spłata długu świadomie zaciągniętego w Etapie 13
+- [ ] Klucze obce między rekordami po `uuid`, nie po lokalnym `id`
+- [ ] Tabela skasowanych rekordów — bez niej usunięty wydatek wróciłby
+      przy pierwszej synchronizacji i nie dałoby się go usunąć na stałe
+- [ ] Znacznik „do wysłania" przy każdym zapisie
+- [ ] Migracja 3 → 4, rozszerzenie formatu kopii zapasowej
+
+### Etap 14c — schemat na serwerze i wysyłka 🔜
+
+- [ ] Tabele w Supabase z kolumną `user_id`
+- [ ] Reguły RLS: `auth.uid() = user_id` — jedyne prawdziwe zabezpieczenie danych
+- [ ] Wysyłka rekordów oznaczonych „do wysłania"
+
+### Etap 14d — pobieranie i scalanie 🔜
+
+- [ ] Pobieranie zmian od znacznika czasu serwera
+- [ ] Konflikt rozstrzyga nowszy zapis (decyzja właściciela projektu, 08.09.2026)
+- [ ] Ekran stanu synchronizacji
+
+## Etap 15 — do rozstrzygnięcia 🔜
 
 Kolejność zależy od tego, co uwiera po kilku tygodniach używania. Kandydaci
 z `docs/PLAN-DALSZY.md`, w kolejności wartości do kosztu:

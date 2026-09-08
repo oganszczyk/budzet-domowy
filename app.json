@@ -42,7 +42,8 @@
           "cameraPermission": "Aplikacja potrzebuje dostępu do aparatu, żeby zeskanować paragon."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

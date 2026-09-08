@@ -437,6 +437,86 @@ export const strings = {
       'Aplikacja nie tworzy kopii sama. Powtórz to co jakiś czas — kopia sprzed pół roku odtworzy dane sprzed pół roku.',
   },
 
+  /**
+   * Etap 14a: konto w chmurze.
+   *
+   * Teksty tej sekcji mają jedno nadrzędne zadanie: NIE pozwolić uwierzyć,
+   * że zalogowanie zabezpiecza dane. Konto jest dopiero przygotowaniem pod
+   * synchronizację — wydatki wciąż leżą wyłącznie w tym telefonie i jedynym
+   * zabezpieczeniem pozostaje kopia zapasowa. Człowiek, który uzna inaczej,
+   * przestanie robić kopie i straci dane przy pierwszej awarii.
+   */
+  account: {
+    title: 'Konto',
+    openFromHome: 'Konto',
+
+    intro:
+      'Konto przygotowuje aplikację na drugi telefon. Zaloguj się na obu urządzeniach tym samym adresem, a wydatki wpisane na jednym pojawią się na drugim.',
+
+    /** Stan przejściowy — trwa ułamek sekundy, ale bez niego mrugałby ekran logowania. */
+    loading: 'Sprawdzam konto...',
+
+    /** To zdanie jest najważniejsze na całym ekranie. */
+    notSyncingYet:
+      'Synchronizacja jeszcze nie działa — to kolejny etap prac. Na razie zalogowanie niczego nie wysyła ani nie pobiera, a Twoje wydatki nadal są wyłącznie w tym telefonie. Rób kopie zapasowe tak samo jak dotąd.',
+
+    /** --- Logowanie i zakładanie konta --- */
+    signInTitle: 'Zaloguj się',
+    signUpTitle: 'Załóż konto',
+
+    emailLabel: 'Adres e-mail',
+    emailPlaceholder: 'twoj@adres.pl',
+    passwordLabel: 'Hasło',
+    passwordPlaceholder: 'Co najmniej 8 znaków',
+
+    signInButton: 'Zaloguj się',
+    signInWorking: 'Loguję...',
+    signUpButton: 'Załóż konto',
+    signUpWorking: 'Zakładam konto...',
+
+    switchToSignUp: 'Nie mam jeszcze konta',
+    switchToSignIn: 'Mam już konto',
+
+    /** Hasła nie da się odzyskać z telefonu — Supabase trzyma tylko jego skrót. */
+    passwordHint:
+      'Zapisz hasło w menedżerze haseł. Będzie potrzebne na drugim telefonie, a aplikacja nie ma jak Ci go przypomnieć.',
+
+    confirmationSentTitle: 'Sprawdź pocztę',
+    confirmationSentMessage:
+      'Wysłaliśmy list z linkiem potwierdzającym. Kliknij w niego, a potem wróć tutaj i zaloguj się.',
+
+    /** --- Stan zalogowany --- */
+    signedInTitle: 'Jesteś zalogowany',
+    signedInAs: 'Konto',
+    signOutButton: 'Wyloguj się',
+    signOutConfirmTitle: 'Wylogować się?',
+    signOutConfirmMessage:
+      'Twoje wydatki zostaną w tym telefonie — wylogowanie niczego nie kasuje. Żeby zalogować się ponownie, będzie potrzebne hasło.',
+    signOutConfirmButton: 'Wyloguj',
+
+    /** --- Aplikacja zbudowana bez pliku .env --- */
+    unavailableTitle: 'Konto niedostępne',
+    unavailableMessage:
+      'Ta wersja aplikacji została zbudowana bez podłączonego projektu w chmurze. Wszystko poza kontem działa normalnie.',
+
+    /** Powody odmowy — każdy mówi, co konkretnie zrobić dalej. */
+    error: {
+      EMPTY_FIELD: 'Wypełnij oba pola.',
+      INVALID_EMAIL: 'To nie wygląda na adres e-mail. Sprawdź, czy jest w nim małpa i kropka.',
+      WEAK_PASSWORD: 'Hasło musi mieć co najmniej 8 znaków.',
+      INVALID_CREDENTIALS:
+        'Nieprawidłowy adres lub hasło. Serwer nie zdradza, które z dwojga — sprawdź oba.',
+      EMAIL_NOT_CONFIRMED:
+        'To konto czeka na potwierdzenie. Znajdź nasz list w poczcie i kliknij w link — zajrzyj też do spamu.',
+      USER_EXISTS: 'Na ten adres jest już założone konto. Wybierz „Mam już konto" i zaloguj się.',
+      RATE_LIMITED: 'Za dużo prób pod rząd. Odczekaj kilka minut i spróbuj ponownie.',
+      NO_NETWORK:
+        'Brak połączenia z serwerem. Sprawdź internet w telefonie. Jeśli internet działa, serwer mógł uśpić się po tygodniu bezczynności — spróbuj jeszcze raz za minutę.',
+      NOT_CONFIGURED: 'Ta wersja aplikacji nie ma podłączonego projektu w chmurze.',
+      UNKNOWN: 'Coś poszło nie tak i nie potrafimy powiedzieć co. Spróbuj ponownie za chwilę.',
+    },
+  },
+
   /** Teksty wspólne. */
   common: {
     save: 'Zapisz',
