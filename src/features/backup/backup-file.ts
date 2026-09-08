@@ -18,6 +18,12 @@
  * ekran ma wytłumaczyć po polsku, co jest nie tak.
  */
 
+import {
+  AnalysisRangeMode,
+  MAX_WINDOW_MONTHS,
+  MIN_WINDOW_MONTHS,
+  type SavedReport,
+} from '@/domain/analysis';
 import { BillStatus, FrequencyType, MainType, PaymentMethod, PaymentSource } from '@/domain/enums';
 import type { BackupSnapshot, GeneratedRecord } from '@/domain/backup';
 import type { BillTemplate, Category, Income, Payment, Subscription } from '@/domain/models';
@@ -30,13 +36,14 @@ import type { BillTemplate, Category, Income, Payment, Subscription } from '@/do
  *
  * Wersja 1: bez dochodów domowników.
  * Wersja 2: z dochodami (Etap 11).
+ * Wersja 3: z zapisanymi zestawieniami (Etap 13).
  *
- * Kopie w wersji 1 nadal się wczytują — brakująca lista dochodów znaczy
+ * Kopie w wersjach 1 i 2 nadal się wczytują — brakująca lista znaczy
  * „nie było ich wtedy", czyli pusta. To jest właśnie powód, dla którego
  * plik nosi numer wersji: pozwala starym kopiom zachować ważność zamiast
  * unieważniać je przy każdej nowej funkcji.
  */
-export const BACKUP_FORMAT_VERSION = 2;
+export const BACKUP_FORMAT_VERSION = 3;
 
 /** Znacznik pozwalający odróżnić naszą kopię od dowolnego innego pliku JSON. */
 export const BACKUP_APP_ID = 'domowe-wydatki';
@@ -257,6 +264,34 @@ function readIncome(value: unknown): Income | null {
   };
 }
 
+function readSavedReport(value: unknown): SavedReport | null {
+  if (!isObject(value)) return null;
+
+  const v = value;
+
+  if (!isInt(v.id) || !isString(v.name) || !isString(v.subjectKey)) return null;
+  if (!isOneOf(v.rangeMode, AnalysisRangeMode)) return null;
+  // Okno musi mieć sensowną długość — zero albo liczba ujemna dałaby zakres,
+  // z którego nie da się zbudować żadnego wykresu.
+  if (v.windowMonths !== null) {
+    if (!isInt(v.windowMonths)) return null;
+    if (v.windowMonths < MIN_WINDOW_MONTHS || v.windowMonths > MAX_WINDOW_MONTHS) return null;
+  }
+  if (!isInt(v.sortOrder)) return null;
+  if (!isString(v.createdAt) || !isString(v.updatedAt)) return null;
+
+  return {
+    id: v.id,
+    name: v.name,
+    subjectKey: v.subjectKey,
+    rangeMode: v.rangeMode,
+    windowMonths: v.windowMonths,
+    sortOrder: v.sortOrder,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+  };
+}
+
 function readGeneratedRecord(value: unknown): GeneratedRecord | null {
   if (!isObject(value)) return null;
 
@@ -330,13 +365,18 @@ export function parseBackup(text: string): BackupParseResult {
   // unieważniłoby wszystkie wcześniejsze kopie użytkownika.
   const incomes = s.incomes === undefined ? [] : readAll(s.incomes, readIncome);
 
+  // Ta sama zasada dla zestawień z Etapu 13: kopie w wersjach 1 i 2 powstały,
+  // zanim istniały, więc ich brak to nie uszkodzenie.
+  const savedReports = s.savedReports === undefined ? [] : readAll(s.savedReports, readSavedReport);
+
   if (
     categories === null ||
     payments === null ||
     billTemplates === null ||
     subscriptions === null ||
     generatedRecords === null ||
-    incomes === null
+    incomes === null ||
+    savedReports === null
   ) {
     return { ok: false, reason: 'DAMAGED' };
   }
@@ -347,7 +387,15 @@ export function parseBackup(text: string): BackupParseResult {
       app: BACKUP_APP_ID,
       formatVersion: raw.formatVersion,
       createdAt: raw.createdAt,
-      snapshot: { categories, payments, billTemplates, subscriptions, generatedRecords, incomes },
+      snapshot: {
+        categories,
+        payments,
+        billTemplates,
+        subscriptions,
+        generatedRecords,
+        incomes,
+        savedReports,
+      },
     },
   };
 }

@@ -69,3 +69,43 @@ export const AnalysisRangeMode = {
 } as const;
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export type AnalysisRangeMode = (typeof AnalysisRangeMode)[keyof typeof AnalysisRangeMode];
+
+/**
+ * Etap 13: zestawienie zapisane pod własną nazwą.
+ *
+ * ZAPISUJEMY DŁUGOŚĆ OKNA, NIE KONKRETNE MIESIĄCE.
+ *
+ * Decyzja właściciela projektu (04.09.2026). Gdyby zestawienie pamiętało
+ * „marzec–sierpień 2026", to za miesiąc pokazywałoby dokładnie to samo —
+ * migawkę z przeszłości. Użytkownik zakłada je raz i chce zaglądać co
+ * miesiąc, więc okno musi przesuwać się razem z kalendarzem: sześć miesięcy
+ * wstecz od dzisiaj, cokolwiek dzisiaj znaczy.
+ *
+ * Przedmiot analizy trzymamy jako `subjectKey` — ten sam tekst, którym
+ * posługuje się adres ekranu („BILL_TEMPLATE:3"). Rozbicie go na kolumny
+ * kusiło, ale nie da się tego zrobić jedną kolumną liczbową: wariant
+ * MAIN_TYPE niesie napis („BILL"), a nie identyfikator. Dwie kolumny
+ * o zmiennym znaczeniu byłyby gorsze niż jeden tekst, który ma już
+ * funkcje zapisu i odczytu wraz z testami.
+ */
+export type SavedReport = {
+  id: number;
+  /** Nazwa nadana przez użytkownika, np. „Gaz w czasie". */
+  name: string;
+  /** Przedmiot analizy w zapisie `subjectKey`. */
+  subjectKey: string;
+  rangeMode: AnalysisRangeMode;
+  /**
+   * Ile miesięcy obejmuje przesuwające się okno.
+   * `null` dla trybu „rok do roku", który sam wie, co porównuje.
+   */
+  windowMonths: number | null;
+  /** Kolejność na liście; nowe trafiają na koniec. */
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Najkrótsze i najdłuższe sensowne okno zestawienia. */
+export const MIN_WINDOW_MONTHS = 2;
+export const MAX_WINDOW_MONTHS = 36;

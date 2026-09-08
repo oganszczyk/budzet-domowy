@@ -137,6 +137,136 @@ describe('migracje (1.2)', () => {
   });
 });
 
+/**
+ * Etap 13, wersja 3 schematu.
+ *
+ * `uuid` celowo NIE należy do modelu danych — jest wyłącznie kolumną bazy,
+ * przygotowaną pod przyszłą synchronizację z drugim telefonem. Skoro nie
+ * przechodzi przez typy TypeScriptu, nie pilnuje go kompilator i tym bardziej
+ * musi go pilnować test.
+ */
+describe('wersja 3 schematu: zestawienia i trwałe identyfikatory', () => {
+  /** Odtwarza bazę w wersji 1 z jednym wydatkiem — stan sprzed aktualizacji. */
+  async function databaseAtVersionOne() {
+    const db = openNodeDatabase();
+    await db.exec(MIGRATIONS[0]);
+    await db.exec('PRAGMA user_version = 1');
+    await seedDefaults(db);
+
+    const repo = new SqliteExpensesRepository(db);
+    const [category] = await repo.listCategories(MainType.PURCHASE);
+    const payment = await repo.createPayment({
+      mainType: MainType.PURCHASE,
+      categoryId: category.id,
+      title: 'Lidl',
+      amountGrosze: 12550,
+      effectiveDate: dueDateFor(THIS_MONTH, 5),
+      dueDate: null,
+      paidDate: null,
+      status: null,
+      source: PaymentSource.MANUAL,
+      merchant: 'Lidl',
+      description: null,
+      paymentMethod: null,
+      billTemplateId: null,
+      subscriptionId: null,
+      receiptImagePath: null,
+    });
+
+    return { db, payment };
+  }
+
+  it('tworzy tabelę zapisanych zestawień', async () => {
+    const db = openNodeDatabase();
+    await migrate(db);
+
+    const tables = await db.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'"
+    );
+
+    expect(tables.map((t) => t.name)).toContain('saved_report');
+  });
+
+  it('nadaje identyfikator rekordom sprzed aktualizacji', async () => {
+    const { db, payment } = await databaseAtVersionOne();
+
+    // Przed aktualizacją kolumny w ogóle nie ma.
+    await migrate(db);
+
+    const row = await db.first<{ uuid: string | null }>('SELECT uuid FROM payment WHERE id = ?', [
+      payment.id,
+    ]);
+
+    expect(typeof row?.uuid).toBe('string');
+    expect(row?.uuid).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('każdy rekord sprzed aktualizacji dostaje WŁASNY identyfikator', async () => {
+    // Gdyby `randomblob` policzył się raz dla całego zapytania, wszystkie
+    // wiersze dostałyby tę samą wartość — czyli coś gorszego niż jej brak,
+    // bo wyglądałaby na poprawny identyfikator.
+    const { db } = await databaseAtVersionOne();
+    await migrate(db);
+
+    const rows = await db.all<{ uuid: string }>('SELECT uuid FROM category');
+    const unikalne = new Set(rows.map((r) => r.uuid));
+
+    expect(rows.length).toBeGreaterThan(1);
+    expect(unikalne.size).toBe(rows.length);
+  });
+
+  it('nowe rekordy dostają identyfikator bez udziału repozytorium', async () => {
+    // Repozytorium nie wie o kolumnie `uuid` i nie wstawia jej do zapytań.
+    // Wypełnia ją wyzwalacz — inaczej wszystko utworzone po aktualizacji
+    // zostałoby bez identyfikatora, po cichu, aż do dnia synchronizacji.
+    const db = openNodeDatabase();
+    await migrate(db);
+    await seedDefaults(db);
+    const repo = new SqliteExpensesRepository(db);
+
+    const income = await repo.createIncome({
+      personName: 'Ola',
+      amountGrosze: 620000,
+      month: '2026-08',
+    });
+    const category = await repo.createCategory({
+      name: 'Zwierzęta',
+      usedBy: [MainType.PURCHASE],
+      iconKey: 'pricetag-outline',
+      isActive: true,
+    });
+
+    const incomeRow = await db.first<{ uuid: string | null }>(
+      'SELECT uuid FROM income WHERE id = ?',
+      [income.id]
+    );
+    const categoryRow = await db.first<{ uuid: string | null }>(
+      'SELECT uuid FROM category WHERE id = ?',
+      [category.id]
+    );
+
+    expect(incomeRow?.uuid).toMatch(/^[0-9a-f]{32}$/);
+    expect(categoryRow?.uuid).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('odtworzenie kopii zapasowej też nadaje identyfikatory', async () => {
+    // Odtwarzanie wstawia wiersze własnym zapytaniem, z zachowaniem
+    // identyfikatorów liczbowych. Wyzwalacz działa i tam.
+    const db = openNodeDatabase();
+    await migrate(db);
+    await seedDefaults(db);
+    const repo = new SqliteExpensesRepository(db);
+
+    await repo.importSnapshot(await repo.exportSnapshot());
+
+    const missing = await db.first<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM category WHERE uuid IS NULL'
+    );
+
+    expect(missing?.count).toBe(0);
+  });
+});
+
 describe('BR-12 wymuszone przez bazę (7.5)', () => {
   async function setup() {
     const db = openNodeDatabase();

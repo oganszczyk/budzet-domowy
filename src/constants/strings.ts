@@ -312,6 +312,30 @@ export const strings = {
     proposalBills: (months: number) =>
       `Rachunki domowe miesiąc po miesiącu, przez ${months} miesięcy`,
     proposalIncome: (months: number) => `Ile wpływało co miesiąc przez ${months} miesięcy`,
+
+    /** Etap 13: zapisywanie własnych zestawień. */
+    savedLabel: 'Twoje zestawienia',
+    saveTitle: 'Zapisz to zestawienie',
+    saveNameLabel: 'Nazwa zestawienia',
+    saveNamePlaceholder: 'np. Gaz w czasie',
+    saveAction: 'Zapisz zestawienie',
+    saveNameRequired: 'Podaj nazwę, po której je rozpoznasz.',
+    saveDuplicate: 'Masz już zestawienie o tej nazwie.',
+    saved: 'Zestawienie zapisane. Znajdziesz je na ekranie Analiza.',
+    /**
+     * Zapisujemy DŁUGOŚĆ okna, nie konkretne miesiące — i użytkownik musi to
+     * wiedzieć przed kliknięciem, bo inaczej byłby przekonany, że zapisał
+     * marzec–sierpień.
+     */
+    saveWindowHint: (count: number, monthsWord: string) =>
+      `Zapiszę jako „ostatnie ${count} ${monthsWord}", licząc od bieżącego. Zestawienie będzie przesuwać się razem z kalendarzem, więc nie zdezaktualizuje się za miesiąc.`,
+    saveYearHint:
+      'Zapiszę jako porównanie roku do roku — zawsze bieżący rok z poprzednim, bez względu na to, kiedy je otworzysz.',
+    savedWindow: (count: number, monthsWord: string) => `ostatnie ${count} ${monthsWord}`,
+    savedYearOverYear: 'rok do roku',
+    deleteTitle: 'Usunąć zestawienie?',
+    deleteMessage: 'Znika samo zestawienie. Żaden zapisany wydatek nie zostanie ruszony.',
+    deleteAction: 'Usuń zestawienie',
   },
 
   /** Etap 11: budżet miesiąca — wykres na ekranie głównym. */
@@ -392,6 +416,7 @@ export const strings = {
     countsSubscriptions: 'Subskrypcje',
     countsCategories: 'Podkategorie',
     countsIncomes: 'Dochody',
+    countsSavedReports: 'Zapisane zestawienia',
 
     /** Powody odmowy — każdy mówi, co konkretnie zrobić. */
     error: {

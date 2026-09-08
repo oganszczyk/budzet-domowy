@@ -677,16 +677,100 @@ To NIE jest ta sama usterka co zgłoszenie
 ostatni znak przy rysowaniu mimo dostępnego miejsca; tutaj miejsca po prostu
 nie ma i system uczciwie sygnalizuje to wielokropkiem.
 
-## Etap 13 — zapisywanie własnych zestawień 🔜 DO ZROBIENIA
+## Etap 13 — zapisywanie własnych zestawień ✅ ZAKOŃCZONY
 
-- [ ] Poszerzyć `MIN_BAR_WIDTH` w `bar-chart.tsx` (usterka ucinanych podpisów)
-- [ ] Dołożyć kolumnę `uuid` — właściciel potwierdził, że pojawi się drugi
-      telefon (iPhone). Przy tej migracji to kilka linijek; po roku zbierania
-      danych dotyka już także formatu kopii zapasowej.
-- [ ] Tabela `saved_report` i migracja schematu do wersji 3
-- [ ] Nazwa zestawienia i zapis z ekranu kreatora
-- [ ] Zapisane zestawienia na ekranie „Analiza", pod propozycjami
-- [ ] Objęcie kopią zapasową (format pliku wersja 3)
+- [x] Poszerzyć `MIN_BAR_WIDTH` w `bar-chart.tsx` (usterka ucinanych podpisów)
+- [x] Kolumna `uuid` — trwałe identyfikatory pod przyszłą synchronizację
+- [x] Tabela `saved_report` i migracja schematu do wersji 3
+- [x] Nazwa zestawienia i zapis z ekranu kreatora
+- [x] Zapisane zestawienia na ekranie „Analiza", pod propozycjami
+- [x] Objęcie kopią zapasową (format pliku wersja 3)
+- [x] Odmiana miesięcy przez liczbę (`src/lib/plural.ts`)
+
+### Zapisujemy DŁUGOŚĆ okna, nie wybrane miesiące
+
+Decyzja właściciela projektu (04.09.2026). Zestawienie pamiętające
+„marzec–sierpień 2026" byłoby za miesiąc migawką z przeszłości — a zakłada się
+je raz i zagląda co miesiąc. Zapisujemy więc „ostatnie sześć miesięcy",
+a konkretne miesiące wyliczamy dopiero przy otwarciu, względem dzisiaj.
+
+Ekran mówi o tym wprost PRZED zapisem. Bez tego zdania użytkownik byłby
+przekonany, że zapisał marzec–sierpień, i uznałby przesunięcie za usterkę.
+
+Przedmiot analizy trzymamy jako `subjectKey` („BILL_TEMPLATE:3"), czyli ten sam
+tekst, którym posługuje się adres ekranu. Rozbicie go na kolumny kusiło, ale
+nie da się tego zrobić jedną kolumną liczbową: wariant `MAIN_TYPE` niesie
+napis, a nie identyfikator. Dwie kolumny o zmiennym znaczeniu byłyby gorsze
+niż jeden tekst, który ma już funkcje zapisu i odczytu wraz z testami.
+
+### Kolumna `uuid` NIE weszła do modelu danych
+
+Właściciel potwierdził, że pojawi się drugi telefon, a przy synchronizacji
+`INTEGER AUTOINCREMENT` zawodzi: dwa urządzenia niezależnie utworzą wydatek
+o numerze 42 i jeden nadpisze drugi. Trwały identyfikator trzeba nadać, zanim
+uzbiera się rok danych.
+
+Wcześniejsza ocena („kilka linijek") była prawdziwa wyłącznie na poziomie SQL.
+Wciągnięcie `uuid` do typów `Payment`, `Category` i pozostałych wymusiłoby
+dopisanie go **wszędzie, gdzie takie rekordy powstają** — w danych
+demonstracyjnych, zasiewie, czytniku kopii zapasowej i kilkudziesięciu
+testach — dla pola, którego dziś nikt nie odczytuje.
+
+Kolumna została więc na poziomie bazy. Istniejące wiersze dostały wartość przy
+migracji, a nowe dostają ją z WYZWALACZA, nie ze zmiany zapytań `INSERT`.
+Rekordy powstają w dziesięciu miejscach repozytorium, licząc odtwarzanie kopii;
+to dziesięć okazji, żeby o jednym zapomnieć — i to po cichu, bo brakujący
+identyfikator niczego nie psuje aż do dnia, w którym powstanie synchronizacja.
+
+Skala tej różnicy jest widoczna w liczbach: rozszerzenie migawki kopii
+zapasowej o zapisane zestawienia wymagało poprawienia **trzech** miejsc
+w testach. Ta sama operacja dla `uuid` na pięciu encjach dotknęłaby ich
+kilkudziesięciu.
+
+Model i format kopii rozszerzymy dopiero wtedy, gdy powstanie prawdziwa
+synchronizacja — do tego czasu kolumna czeka wypełniona.
+
+### Trzy formy liczby mnogiej
+
+„Ostatnie 3 miesięcy" albo „ostatnie 22 miesiące" to nie jest drobiazg
+kosmetyczny — tak pisze automat, nie aplikacja, której powierza się domowy
+budżet. `src/lib/plural.ts` wybiera formę wg reguły polskiej, z wyjątkiem
+na nastolatki (12–14 idą do „miesięcy" mimo końcówki 2–4). Test przechodzi
+wszystkie dopuszczalne długości okna od 2 do 36.
+
+### Zestawienie kasujemy NAPRAWDĘ
+
+7.5 każe kategorie z historią ukrywać, a nie kasować — usunięta kategoria
+zabrałaby ze sobą sens zapisanych wydatków. Zestawienie niczego nie osieroci:
+to zapamiętane pytanie, nie dane. Kasujemy je fizycznie, po potwierdzeniu.
+
+### Sprawdzone w działającej aplikacji
+
+| Sprawdzenie                                 | Wynik                                            |
+| ------------------------------------------- | ------------------------------------------------ |
+| Pusta nazwa                                 | zapis zablokowany                                |
+| Nazwa zajęta, inna wielkość liter           | zapis zablokowany                                |
+| Zapis i pojawienie się na liście            | „Wszystkie wydatki · ostatnie 6 miesięcy"        |
+| Otwarcie zapisanego zestawienia we wrześniu | zakres kwiecień–wrzesień, przeliczony od dzisiaj |
+| Odmowa w pytaniu o usunięcie                | zestawienie zostaje                              |
+| Potwierdzenie usunięcia                     | znika razem z całą sekcją                        |
+| Migracja 1 → 3 na danych                    | wydatek nietknięty, identyfikatory nadane        |
+
+**Do sprawdzenia na fizycznym telefonie:** czy poszerzenie słupka faktycznie
+usuwa wielokropki pod osią. Pomiar mówi, że tak (najszerszy podpis 26,7 px
+przy słupku 32 px), ale wielokropki wyszły właśnie z różnicy między czcionką
+przeglądarki a systemową czcionką Androida.
+
+## Etap 14 — do rozstrzygnięcia 🔜
+
+Kolejność zależy od tego, co uwiera po kilku tygodniach używania. Kandydaci
+z `docs/PLAN-DALSZY.md`, w kolejności wartości do kosztu:
+
+- [ ] Powiadomienia przed terminem rachunku — jedyna funkcja, która sama się
+      spłaca; rachunki mają `dueDate`, a aplikacja nic z tym nie robi
+- [ ] Przypomnienie o kopii zapasowej („nie robiłeś kopii od 30 dni")
+- [ ] Automatyczna kategoryzacja po nazwie sklepu
+- [ ] Limity dla kategorii („Jedzenie maksymalnie 1 500 zł")
 
 ## Odstępstwa od specyfikacji
 

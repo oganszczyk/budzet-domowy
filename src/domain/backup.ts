@@ -21,6 +21,7 @@
  * wierną kopią, nie ponownym wpisaniem danych.
  */
 
+import type { SavedReport } from './analysis';
 import type { BillTemplate, Category, Income, Payment, Subscription } from './models';
 
 /**
@@ -48,6 +49,14 @@ export type BackupSnapshot = {
   generatedRecords: GeneratedRecord[];
   /** Etap 11: dochody domowników. */
   incomes: Income[];
+  /**
+   * Etap 13: zestawienia zapisane przez użytkownika.
+   *
+   * To nie są dane finansowe, więc kusiło, żeby je pominąć. Ale zestawienie
+   * jest pracą użytkownika tak samo jak wpisany wydatek — po zmianie telefonu
+   * musiałby wyklikać je od nowa, nie mając nawet jak sprawdzić, jakie miał.
+   */
+  savedReports: SavedReport[];
 };
 
 /** Ile rekordów każdego rodzaju zawiera migawka — do pokazania użytkownikowi. */
@@ -57,6 +66,7 @@ export type BackupCounts = {
   subscriptions: number;
   categories: number;
   incomes: number;
+  savedReports: number;
 };
 
 export function countSnapshot(snapshot: BackupSnapshot): BackupCounts {
@@ -66,5 +76,6 @@ export function countSnapshot(snapshot: BackupSnapshot): BackupCounts {
     subscriptions: snapshot.subscriptions.length,
     categories: snapshot.categories.length,
     incomes: snapshot.incomes.length,
+    savedReports: snapshot.savedReports.length,
   };
 }

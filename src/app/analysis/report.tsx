@@ -11,19 +11,35 @@
  * podmienić pozycję albo zakres i dalej grzebać. Gdyby propozycje miały własny
  * ekran, każda zmiana wymagałaby cofania się i zaczynania od zera.
  *
- * ETAP 12 NIE ZAPISUJE ZESTAWIEŃ. Decyzja właściciela projektu (27.08.2026):
- * najpierw sprawdzamy na telefonie, czy takie zestawienia są w ogóle użyteczne,
- * a dopiero potem dokładamy tabelę w bazie i migrację schematu (Etap 13).
+ * Etap 13 dołożył zapisywanie (karta na dole ekranu). Kolejność była celowa:
+ * najpierw sprawdziliśmy na telefonie, czy takie zestawienia są w ogóle
+ * użyteczne, a dopiero potem doszła tabela w bazie i migracja schematu.
+ *
+ * ZAPISUJEMY DŁUGOŚĆ OKNA, NIE WYBRANE MIESIĄCE. Zestawienie „marzec–sierpień"
+ * byłoby za miesiąc migawką z przeszłości; „ostatnie sześć miesięcy" przesuwa
+ * się razem z kalendarzem. Ekran mówi o tym wprost przed zapisem, bo inaczej
+ * użytkownik byłby przekonany, że zapisał konkretne miesiące.
  */
 
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { strings } from '@/constants/strings';
-import { AnalysisRangeMode, AnalysisSubjectKind, type AnalysisSubject } from '@/domain/analysis';
+import {
+  AnalysisRangeMode,
+  AnalysisSubjectKind,
+  MAX_WINDOW_MONTHS,
+  MIN_WINDOW_MONTHS,
+  type AnalysisSubject,
+} from '@/domain/analysis';
 import { MainType } from '@/domain/enums';
-import { useAnalysisSeries, useSubjectDictionaries } from '@/features/analysis/queries';
+import {
+  useAnalysisSeries,
+  useCreateSavedReport,
+  useSavedReports,
+  useSubjectDictionaries,
+} from '@/features/analysis/queries';
 import { compareYears, summarizeSeries } from '@/features/analysis/series';
 import { describeSubject, subjectFromKey, subjectKey } from '@/features/analysis/subject';
 import {
@@ -37,12 +53,14 @@ import {
   type YearMonth,
 } from '@/lib/date';
 import { formatGrosze } from '@/lib/money';
+import { months as monthsWord } from '@/lib/plural';
 import { BarChart, type BarChartBar } from '@/ui/components/bar-chart';
+import { Button } from '@/ui/components/button';
 import { Card } from '@/ui/components/card';
 import { Chip, chipRowStyle } from '@/ui/components/chip';
 import { MonthStepper } from '@/ui/components/month-stepper';
 import { Screen } from '@/ui/components/screen';
-import { colors, fontSize, spacing } from '@/ui/theme';
+import { colors, fontSize, radius, spacing } from '@/ui/theme';
 
 /**
  * Grupa wyboru w pierwszym rzędzie.
@@ -302,7 +320,98 @@ export default function AnalysisReportScreen() {
           </Card>
         </>
       ) : null}
+
+      <SaveReportCard subject={subject} mode={mode} windowMonths={visiblePoints.length} />
     </Screen>
+  );
+}
+
+/**
+ * Zapisanie bieżącego zestawienia pod własną nazwą (Etap 13).
+ *
+ * Karta stoi NA DOLE, pod wynikiem, a nie nad nim. Zapisuje się to, co się
+ * przed chwilą obejrzało i uznało za przydatne — pytanie o nazwę przed
+ * zobaczeniem wykresu byłoby pytaniem o kota w worku.
+ */
+function SaveReportCard({
+  subject,
+  mode,
+  windowMonths,
+}: {
+  subject: AnalysisSubject;
+  mode: AnalysisRangeMode;
+  /** Ile miesięcy obejmuje to, co widać — tyle zapiszemy jako długość okna. */
+  windowMonths: number;
+}) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [savedName, setSavedName] = useState<string | null>(null);
+
+  const { data: existing } = useSavedReports();
+  const createSavedReport = useCreateSavedReport();
+
+  const isYearOverYear = mode === AnalysisRangeMode.YEAR_OVER_YEAR;
+  const clampedWindow = Math.min(Math.max(windowMonths, MIN_WINDOW_MONTHS), MAX_WINDOW_MONTHS);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+
+    if (trimmed === '') {
+      setError(strings.analysis.saveNameRequired);
+      return;
+    }
+    // Dwa zestawienia o tej samej nazwie są nie do rozróżnienia na liście,
+    // a lista jest jedynym miejscem, w którym się je otwiera.
+    if ((existing ?? []).some((r) => r.name.trim().toLowerCase() === trimmed.toLowerCase())) {
+      setError(strings.analysis.saveDuplicate);
+      return;
+    }
+
+    setError(null);
+    await createSavedReport.mutateAsync({
+      name: trimmed,
+      subjectKey: subjectKey(subject),
+      rangeMode: mode,
+      windowMonths: isYearOverYear ? null : clampedWindow,
+    });
+
+    setSavedName(trimmed);
+    setName('');
+  };
+
+  return (
+    <Card style={styles.saveCard}>
+      <Text style={styles.saveTitle}>{strings.analysis.saveTitle}</Text>
+
+      <Text style={styles.hint}>
+        {isYearOverYear
+          ? strings.analysis.saveYearHint
+          : strings.analysis.saveWindowHint(clampedWindow, monthsWord(clampedWindow))}
+      </Text>
+
+      <TextInput
+        value={name}
+        onChangeText={(text) => {
+          setName(text);
+          setError(null);
+          setSavedName(null);
+        }}
+        placeholder={strings.analysis.saveNamePlaceholder}
+        placeholderTextColor={colors.textMuted}
+        accessibilityLabel={strings.analysis.saveNameLabel}
+        style={[styles.input, error ? styles.inputError : null]}
+      />
+
+      {error ? <Text style={styles.warning}>{error}</Text> : null}
+      {savedName ? <Text style={styles.saved}>{strings.analysis.saved}</Text> : null}
+
+      <Button
+        label={strings.analysis.saveAction}
+        icon="bookmark-outline"
+        onPress={handleSave}
+        loading={createSavedReport.isPending}
+      />
+    </Card>
   );
 }
 
@@ -571,5 +680,31 @@ const styles = StyleSheet.create({
   },
   monthMuted: {
     color: colors.textMuted,
+  },
+  saveCard: {
+    marginTop: spacing.xl,
+    gap: spacing.md,
+  },
+  saveTitle: {
+    fontSize: fontSize.label,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  input: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.body,
+    color: colors.text,
+  },
+  inputError: {
+    borderColor: colors.statusOverdue,
+  },
+  saved: {
+    fontSize: fontSize.caption,
+    color: colors.statusPaid,
   },
 });
